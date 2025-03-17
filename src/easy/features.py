@@ -2,7 +2,7 @@ import email.message
 import email.utils
 
 
-def extract(msg: email.message.EmailMessage) -> dict:
+def evaluate(msg: email.message.EmailMessage) -> dict:
     if msg is None:
         return {}
     features = {}
@@ -33,15 +33,15 @@ def _evaluate_headers_value_features(msg: email.message.EmailMessage) -> dict:
     from_addresses = email.utils.getaddresses(msg.get_all('from', []))
     replyto_addresses = email.utils.getaddresses(msg.get_all('reply-to', []))
     features['is_replyto_equal_from'] = 1 if len(replyto_addresses) == 0 \
-                                          or _is_replyto_equal_from(replyto_addresses,
-                                                                    from_addresses) \
+                                          or _equals(replyto_addresses,
+                                                    from_addresses) \
                                           else 0
     # TODO number of recipients
     return features
 
 
-def _is_replyto_equal_from(addresses1: list[tuple[str, str]],
-                           addresses2: list[tuple[str, str]]) -> bool:
+def _equals(addresses1: list[tuple[str, str]],
+           addresses2: list[tuple[str, str]]) -> bool:
     if len(addresses1) != len(addresses2):
         return False
     emails1 = map(lambda t: t[1], addresses1)
@@ -59,7 +59,7 @@ def _evaluate_content_features(msg: email.message.EmailMessage) -> dict:
  
 
 def label_automatically(features: list[dict]) -> list[str]:
-    """Analyze features to label an email as 'sent-by-human' or 'sent-by-service',
+    """Analyze features to label an email as 'sent-by-human' or 'sent-by-service'
     according to a set of heuristics   
 
     :return: list of labels as int: 0 -> human, 1 -> service 
