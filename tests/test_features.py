@@ -24,20 +24,20 @@ class TestFeatures(unittest.TestCase):
             self.fail('test resources mismatch, every "input .txt" must have a matching "expected .json"')
         for i, path in enumerate(input_paths): 
             msg = read_email_from_file(path)
-            expected = read_features_dict_from_file(expected_paths[i])
+            expected = read_features_from_file(expected_paths[i])
             with self.subTest(msg=msg, expected=expected):
                 features = easy.features.evaluate(msg)
                 self.assertEqual(expected, features)
 
 
-def read_email_from_file(path):
+def read_email_from_file(path) -> email.message.EmailMessage:
     with open(path) as fp:
         msg = email.parser.Parser(policy=email.policy.default) \
                 .parsestr(fp.read())
     return msg
 
 
-def read_features_dict_from_file(path):
+def read_features_from_file(path) -> dict:
     with open(path) as json_file:
         data = json.load(json_file)
     return data

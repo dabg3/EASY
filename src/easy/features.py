@@ -52,7 +52,7 @@ def _equals(addresses1: list[tuple[str, str]],
     return True
 
 
-def _count_recipients(msg: email.message.EmailMessage):
+def _count_recipients(msg: email.message.EmailMessage) -> int:
     # 'to' addresses may be duplicate in 'resent-to', same for other 'resent-' fields. 
     # That's good because a service mail won't likely have any 'resent-' field,
     # so human emails would have an higher amount of recipients just because of 
@@ -71,6 +71,10 @@ def _evaluate_content_features(msg: email.message.EmailMessage) -> dict:
     features['self_ref_links_count'] = 0
     features['has_attachment'] = 0
     return features
+
+
+def _calculate_text_html_ratio(msg: email.message.EmailMessage) -> float:
+    return 0
  
 
 def label_automatically(features: list[dict]) -> list[str]:
