@@ -6,15 +6,7 @@ def evaluate(msg: email.message.EmailMessage) -> dict:
     if msg is None:
         return {}
     features = {}
-    features.update(_evaluate_headers_presence_features(msg))
-    features.update(_evaluate_headers_value_features(msg))
-    features.update(_evaluate_content_features(msg))
-    return features
-
-
-def _evaluate_headers_presence_features(msg: email.message.EmailMessage) -> dict:
-    # check for the presence of some headers to evaluate features
-    features = {}
+    # headers presence features
     features['has_list_unsubscribe'] = 1 if msg.get('list-unsubscribe') else 0
     features['has_list_id'] = 1 if msg.get('list-id') else 0
     features['has_precedence'] = 1 if msg.get('precedence') else 0
@@ -23,21 +15,22 @@ def _evaluate_headers_presence_features(msg: email.message.EmailMessage) -> dict
     features['has_mailer'] = 1 if msg.get('x-mailer') else 0
     features['has_campaign'] = 1 if msg.get('x-campaign') else 0
     features['has_csa_complaints'] = 1 if msg.get('x-csa-complaints') else 0
+    # headers value features
+    features['is_replyto_equal_from'] = 1 if _is_replyto_equal_from(msg) else 0
+    features['recipients_count'] = _count_recipients(msg)
+    # body value features
+    features['text_html_ratio'] = _calculate_text_html_ratio(msg)
+    features['self_ref_links_count'] = _count_self_ref_links(msg)
+    features['has_attachment'] = 0 # TODO
     return features
 
 
-def _evaluate_headers_value_features(msg: email.message.EmailMessage) -> dict:
-    # inspect the value of some headers to evaluate features
-    features = {}
+def _is_replyto_equal_from(msg: email.message.EmailMessage) -> bool:
     # RFC6854 allows group syntax
     from_addresses = email.utils.getaddresses(msg.get_all('from', []))
     replyto_addresses = email.utils.getaddresses(msg.get_all('reply-to', []))
-    features['is_replyto_equal_from'] = 1 if len(replyto_addresses) == 0 \
-                                          or _equals(replyto_addresses,
-                                                    from_addresses) \
-                                          else 0
-    features['recipients_count'] = _count_recipients(msg)
-    return features
+    return len(replyto_addresses) == 0 \
+           or _equals(replyto_addresses, from_addresses)
 
 
 def _equals(addresses1: list[tuple[str, str]],
@@ -64,18 +57,15 @@ def _count_recipients(msg: email.message.EmailMessage) -> int:
     return len(tos + ccs + resent_tos + resent_ccs)
 
 
-def _evaluate_content_features(msg: email.message.EmailMessage) -> dict:
-    # inspect the body to evaluate features    
-    features = {}
-    features['text_html_ratio'] = 1
-    features['self_ref_links_count'] = 0
-    features['has_attachment'] = 0
-    return features
-
-
 def _calculate_text_html_ratio(msg: email.message.EmailMessage) -> float:
+    # TODO
+    return 1
+
+
+def _count_self_ref_links(msg: email.message.EmailMessage) -> int:
+    # TODO
     return 0
- 
+
 
 def label_automatically(features: list[dict]) -> list[str]:
     """Analyze features to label an email as 'sent-by-human' or 'sent-by-service'
