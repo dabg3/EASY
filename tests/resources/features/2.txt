@@ -1,0 +1,19 @@
+Message-ID: <16159836.1075855377439.whatever>
+Date: Fri, 7 Dec 2001 10:06:42 -0800 (PST)
+From: from@from.xyz
+To: to@to.xyz
+Subject: subject
+Content-Type: text/html
+
+<html>
+<head>
+</head>
+<body dir=3D"ltr">
+<div>
+<a href=3D"https://from.xyz" id=3D"LPlnk678098" title=3D"https://from.xyz">
+questo e' un link</a>
+</div>
+<br>
+<a href=3D"https://from.xyz">link2</a>
+</body>
+</html>

@@ -1,28 +1,32 @@
 import email.message
 import email.utils
+import re
+import html.parser
 
 
-def evaluate(msg: email.message.EmailMessage) -> dict:
-    if msg is None:
-        return {}
-    features = {}
-    # headers presence features
-    features['has_list_unsubscribe'] = 1 if msg.get('list-unsubscribe') else 0
-    features['has_list_id'] = 1 if msg.get('list-id') else 0
-    features['has_precedence'] = 1 if msg.get('precedence') else 0
-    features['has_feedback_id'] = 1 if msg.get('feedback-id') \
-                                    or msg.get('x-feedback-id') else 0
-    features['has_mailer'] = 1 if msg.get('x-mailer') else 0
-    features['has_campaign'] = 1 if msg.get('x-campaign') else 0
-    features['has_csa_complaints'] = 1 if msg.get('x-csa-complaints') else 0
-    # headers value features
-    features['is_replyto_equal_from'] = 1 if _is_replyto_equal_from(msg) else 0
-    features['recipients_count'] = _count_recipients(msg)
-    # body value features
-    features['text_html_ratio'] = _calculate_text_html_ratio(msg)
-    features['self_ref_links_count'] = _count_self_ref_links(msg)
-    features['has_attachment'] = 0 # TODO
-    return features
+def evaluate(msg: email.message.EmailMessage) -> dict | None:
+    try:
+        features = {}
+        # headers presence features
+        features['has_list_unsubscribe'] = 1 if msg.get('list-unsubscribe') else 0
+        features['has_list_id'] = 1 if msg.get('list-id') else 0
+        features['has_precedence'] = 1 if msg.get('precedence') else 0
+        features['has_feedback_id'] = 1 if msg.get('feedback-id') \
+                                        or msg.get('x-feedback-id') else 0
+        features['has_mailer'] = 1 if msg.get('x-mailer') else 0
+        features['has_campaign'] = 1 if msg.get('x-campaign') else 0
+        features['has_csa_complaints'] = 1 if msg.get('x-csa-complaints') else 0
+        # headers value features
+        features['is_replyto_equal_from'] = 1 if _is_replyto_equal_from(msg) else 0
+        features['recipients_count'] = _count_recipients(msg)
+        # body value features
+        features['text_html_ratio'] = _calculate_text_html_ratio(msg)
+        features['self_ref_links_count'] = _count_self_ref_links(msg)
+        features['has_attachment'] = 0 # TODO
+        return features
+    except Exception as e:
+        # TODO log
+        return None
 
 
 def _is_replyto_equal_from(msg: email.message.EmailMessage) -> bool:
@@ -58,13 +62,62 @@ def _count_recipients(msg: email.message.EmailMessage) -> int:
 
 
 def _calculate_text_html_ratio(msg: email.message.EmailMessage) -> float:
-    # TODO
-    return 1
+    # return a value between 0..1 (i.e html_only...plain_only)
+    plain_bytes = 0
+    html_bytes = 0
+    # multipart can be laid out hierarchically
+    for p in msg.walk():
+        if p.get_content_type() == 'text/plain':
+            plain_bytes += _size_bytes(p.get_content(), p.get_content_charset())
+        elif p.get_content_type() == 'text/html':
+            html_bytes += _size_bytes(p.get_content(), p.get_content_charset())
+    sum_bytes = plain_bytes + html_bytes
+    if sum_bytes == 0:
+        raise ValueError("unexpected body content")
+    return plain_bytes / (sum_bytes)
 
 
+def _size_bytes(s: str, charset: str | None) -> int:
+    if charset is None:
+        charset = 'utf-8'
+    return len(s.encode(charset))
+
+
+class LinkParser(html.parser.HTMLParser):
+
+    def __init__(self, domain):
+        super().__init__()
+        self.domain = domain
+        self.self_ref_link_count = 0
+
+    def handle_starttag(self, tag, attrs):
+        if not tag == 'a':
+            return
+        for a, v in attrs:
+            if not a == 'href':
+                continue
+            if self.domain in v:
+                self.self_ref_link_count += 1
+
+
+# TODO domain maybe not exactly the same i.e trenitalia.it trenitalia.com
 def _count_self_ref_links(msg: email.message.EmailMessage) -> int:
-    # TODO
-    return 0
+    from_email = email.utils.getaddresses(msg.get_all('from', []))[0][1]
+    domain = _extract_email_domain(from_email)
+    parser = LinkParser(domain)
+    for p in msg.walk():
+        if not p.get_content_type() == 'text/html':
+            continue
+        parser.feed(p.get_content())
+    return parser.self_ref_link_count
+
+
+def _extract_email_domain(address: str) -> str:
+    pattern = r'@([^@]+)$'
+    match = re.search(pattern, address)
+    if match:
+        return match.group(1)
+    raise ValueError(f"cannot parse email address: {address}")
 
 
 def label_automatically(features: list[dict]) -> list[str]:

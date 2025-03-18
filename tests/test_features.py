@@ -11,7 +11,7 @@ import easy.features
 class TestFeatures(unittest.TestCase):
 
     def testEvaluation_None_emptyDict(self):
-        self.assertEqual({}, easy.features.evaluate(None))
+        self.assertEqual(easy.features.evaluate(None), None)
 
     def testEvaluation_parameterized(self):
         # test resources are stored in tests/resources/features.
@@ -19,15 +19,29 @@ class TestFeatures(unittest.TestCase):
         # expected features file format:    {id}.json 
         testdata_path = pathlib.Path(testdata.__path__[0])
         input_paths = list(testdata_path.glob('*.txt'))
-        expected_paths = list(testdata_path.glob('*.json'))
-        if len(input_paths) != len(expected_paths):
-            self.fail('test resources mismatch, every "input .txt" must have a matching "expected .json"')
-        for i, path in enumerate(input_paths): 
-            msg = read_email_from_file(path)
-            expected = read_features_from_file(expected_paths[i])
-            with self.subTest(msg=msg, expected=expected):
-                features = easy.features.evaluate(msg)
-                self.assertEqual(expected, features)
+        for input_path in input_paths: 
+            expected_path = find_matching_expected(input_path.stem, testdata_path)
+            if expected_path is None:
+                self.fail('test resources mismatch, every "input .txt" must have a matching "expected .json"')
+            try:
+                email = read_email_from_file(input_path)
+            except Exception:
+                self.fail(f"cannot parse input file: {input_path}")
+            try:
+                expected = read_features_from_file(expected_path)
+            except Exception:
+                self.fail(f"cannot parse expected file: {expected_path}")
+            with self.subTest(f"resource {input_path.name}"):
+                features = easy.features.evaluate(email)
+                self.assertEqual(features, expected)
+
+
+def find_matching_expected(res_id, testdata_path) -> pathlib.Path | None:
+    expected_paths = list(testdata_path.glob('*.json'))
+    for p in expected_paths:
+        if res_id == p.stem:
+            return p
+    return None 
 
 
 def read_email_from_file(path) -> email.message.EmailMessage:
