@@ -36,7 +36,7 @@ def _evaluate_headers_value_features(msg: email.message.EmailMessage) -> dict:
                                           or _equals(replyto_addresses,
                                                     from_addresses) \
                                           else 0
-    # TODO number of recipients
+    features['recipients_count'] = _count_recipients(msg)
     return features
 
 
@@ -52,9 +52,24 @@ def _equals(addresses1: list[tuple[str, str]],
     return True
 
 
+def _count_recipients(msg: email.message.EmailMessage):
+    # 'to' addresses may be duplicate in 'resent-to', same for other 'resent-' fields. 
+    # That's good because a service mail won't likely have any 'resent-' field,
+    # so human emails would have an higher amount of recipients just because of 
+    # that duplication.
+    tos = msg.get_all('to', [])
+    ccs = msg.get_all('cc', [])
+    resent_tos = msg.get_all('resent-to', [])
+    resent_ccs = msg.get_all('resent-cc', [])
+    return len(tos + ccs + resent_tos + resent_ccs)
+
+
 def _evaluate_content_features(msg: email.message.EmailMessage) -> dict:
     # inspect the body to evaluate features    
     features = {}
+    features['text_html_ratio'] = 1
+    features['self_ref_links_count'] = 0
+    features['has_attachment'] = 0
     return features
  
 
