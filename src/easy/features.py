@@ -17,7 +17,7 @@ def evaluate(msg: email.message.EmailMessage) -> dict | None:
         features['has_campaign'] = 1 if msg.get('x-campaign') else 0
         features['has_csa_complaints'] = 1 if msg.get('x-csa-complaints') else 0
         # headers value features
-        features['is_replyto_equal_from'] = 1 if _is_replyto_equal_from(msg) else 0
+        features['is_replyto_equal_from'] = 1 if _equals_replyto_from(msg) else 0
         features['recipients_count'] = _count_recipients(msg)
         # body value features
         features['text_html_ratio'] = _calculate_text_html_ratio(msg)
@@ -29,7 +29,7 @@ def evaluate(msg: email.message.EmailMessage) -> dict | None:
         return None
 
 
-def _is_replyto_equal_from(msg: email.message.EmailMessage) -> bool:
+def _equals_replyto_from(msg: email.message.EmailMessage) -> bool:
     # RFC6854 allows group syntax
     from_addresses = email.utils.getaddresses(msg.get_all('from', []))
     replyto_addresses = email.utils.getaddresses(msg.get_all('reply-to', []))
@@ -58,7 +58,7 @@ def _count_recipients(msg: email.message.EmailMessage) -> int:
     ccs = msg.get_all('cc', [])
     resent_tos = msg.get_all('resent-to', [])
     resent_ccs = msg.get_all('resent-cc', [])
-    return len(tos + ccs + resent_tos + resent_ccs)
+    return len(email.utils.getaddresses(tos + ccs + resent_tos + resent_ccs))
 
 
 def _calculate_text_html_ratio(msg: email.message.EmailMessage) -> float:
@@ -96,11 +96,12 @@ class LinkParser(html.parser.HTMLParser):
         for a, v in attrs:
             if not a == 'href':
                 continue
+            # TODO support domain with different TLD
+            # i.e trenitalia.it trenitalia.com
             if self.domain in v:
                 self.self_ref_link_count += 1
 
 
-# TODO domain maybe not exactly the same i.e trenitalia.it trenitalia.com
 def _count_self_ref_links(msg: email.message.EmailMessage) -> int:
     from_email = email.utils.getaddresses(msg.get_all('from', []))[0][1]
     domain = _extract_email_domain(from_email)
