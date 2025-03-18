@@ -41,7 +41,7 @@ def _evaluate_headers_value_features(msg: email.message.EmailMessage) -> dict:
 
 
 def _equals(addresses1: list[tuple[str, str]],
-           addresses2: list[tuple[str, str]]) -> bool:
+            addresses2: list[tuple[str, str]]) -> bool:
     if len(addresses1) != len(addresses2):
         return False
     emails1 = map(lambda t: t[1], addresses1)
