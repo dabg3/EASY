@@ -4,7 +4,14 @@ import re
 import html.parser
 
 
+# TODO all features that require 'walking' the body parts
+#   can be written better to improve performance.
+#   Right now every evaluation 'walks'.
+
+
 def evaluate(msg: email.message.EmailMessage) -> dict | None:
+    if msg is None:
+        return None
     try:
         features = {}
         # headers presence features
@@ -20,11 +27,12 @@ def evaluate(msg: email.message.EmailMessage) -> dict | None:
         features['is_replyto_equal_from'] = 1 if _equals_replyto_from(msg) else 0
         features['recipients_count'] = _count_recipients(msg)
         # body value features
-        features['text_html_ratio'] = _calculate_text_html_ratio(msg)
+        features['media_html_ratio'] = _calculate_media_html_ratio(msg)
         features['self_ref_links_count'] = _count_self_ref_links(msg)
-        features['has_attachment'] = 0 # TODO
+        features['has_attachment'] = 1 if _has_attachment(msg) else 0
         return features
     except Exception as e:
+        print('error:', e)
         # TODO log
         return None
 
@@ -61,20 +69,27 @@ def _count_recipients(msg: email.message.EmailMessage) -> int:
     return len(email.utils.getaddresses(tos + ccs + resent_tos + resent_ccs))
 
 
-def _calculate_text_html_ratio(msg: email.message.EmailMessage) -> float:
-    # return a value between 0..1 (i.e html_only...plain_only)
-    plain_bytes = 0
+def _calculate_media_html_ratio(msg: email.message.EmailMessage) -> float:
+    # return a value between 0..1 (i.e html_only...media_only)
+    media_bytes = 0
     html_bytes = 0
     # multipart can be laid out hierarchically
     for p in msg.walk():
-        if p.get_content_type() == 'text/plain':
-            plain_bytes += _size_bytes(p.get_content(), p.get_content_charset())
-        elif p.get_content_type() == 'text/html':
+        if p.is_multipart():
+            continue
+        elif p.get_content_maintype() == 'text' \
+        and 'html' in p.get_content_subtype():
             html_bytes += _size_bytes(p.get_content(), p.get_content_charset())
-    sum_bytes = plain_bytes + html_bytes
+        else:
+            # any content-type that is not html is likely to be user content
+            # i.e plain, image, pdf....
+            media_bytes += len(p.get_content()) \
+                           if isinstance(p.get_content(), bytes) \
+                           else _size_bytes(p.get_content(), p.get_content_charset())
+    sum_bytes = media_bytes + html_bytes
     if sum_bytes == 0:
         raise ValueError("unexpected body content")
-    return plain_bytes / (sum_bytes)
+    return media_bytes / (sum_bytes)
 
 
 def _size_bytes(s: str, charset: str | None) -> int:
@@ -83,42 +98,55 @@ def _size_bytes(s: str, charset: str | None) -> int:
     return len(s.encode(charset))
 
 
-class LinkParser(html.parser.HTMLParser):
+class LinkCounter(html.parser.HTMLParser):
 
     def __init__(self, domain):
         super().__init__()
         self.domain = domain
-        self.self_ref_link_count = 0
+        self.domain_links_count = 0
 
     def handle_starttag(self, tag, attrs):
         if not tag == 'a':
             return
         for a, v in attrs:
-            if not a == 'href':
+            if not a == 'href' or v.startswith('mailto:'):
                 continue
-            # TODO support domain with different TLD
-            # i.e trenitalia.it trenitalia.com
             if self.domain in v:
-                self.self_ref_link_count += 1
+                self.domain_links_count += 1
 
 
 def _count_self_ref_links(msg: email.message.EmailMessage) -> int:
     from_email = email.utils.getaddresses(msg.get_all('from', []))[0][1]
-    domain = _extract_email_domain(from_email)
-    parser = LinkParser(domain)
+    domain = _extract_email_second_lvl_domain(from_email)
+    parser = LinkCounter(domain)
     for p in msg.walk():
         if not p.get_content_type() == 'text/html':
             continue
         parser.feed(p.get_content())
-    return parser.self_ref_link_count
+    return parser.domain_links_count
 
 
-def _extract_email_domain(address: str) -> str:
-    pattern = r'@([^@]+)$'
-    match = re.search(pattern, address)
+def _extract_email_second_lvl_domain(address: str) -> str:
+    # input     user@sub.domain.com
+    # output    domain.
+    root_domain_pattern = r'@([^@]+)$'
+    match = re.search(root_domain_pattern, address)
+    if match:
+        root_domain = match.group(1)
+    second_lvl_domain_pattern = r'([^.]+\.)([^.]+)$'
+    match = re.search(second_lvl_domain_pattern, root_domain)
     if match:
         return match.group(1)
     raise ValueError(f"cannot parse email address: {address}")
+
+
+def _has_attachment(msg: email.message.EmailMessage) -> bool:
+    for p in msg.walk():
+        if not p.get_content_disposition():
+            continue
+        elif p.get_content_disposition().startswith('attachment'):
+            return True
+    return False
 
 
 def label_automatically(features: list[dict]) -> list[str]:

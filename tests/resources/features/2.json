@@ -8,7 +8,7 @@
     "has_csa_complaints": 0,
     "is_replyto_equal_from": 1,
     "recipients_count": 1,
-    "text_html_ratio": 0.0,
+    "media_html_ratio": 0.0,
     "self_ref_links_count": 2,
     "has_attachment": 0
 }

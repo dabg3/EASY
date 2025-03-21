@@ -32,6 +32,8 @@ class TestFeatures(unittest.TestCase):
             except Exception:
                 self.fail(f"cannot parse expected file: {expected_path}")
             with self.subTest(f"resource {input_path.name}"):
+                #if not input_path.stem == '4':
+                #    continue
                 features = easy.features.evaluate(email)
                 self.assertEqual(features, expected)
 
