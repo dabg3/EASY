@@ -32,3 +32,36 @@ Build with
 python -m build .
 ```
 
+## Run
+
+Right now `easycli` is very bare-bones, it's relevant for testing instead of real usage. 
+There's no input arguments parsing yet, at the same time a bunch of inputs are required
+making the command cumbersome and quite long.
+
+It's been only tested on gmail, while also implementing the oauth flow according 
+to gmail documentation. It's likely gmail is the only provider authenticating, 
+more providers are gonna be tested.
+
+```
+easycli <path to client_secret.json> \
+        <oauth_scope> \
+        <oauth_server_authorization_url> \
+        <oauth_server_token_url> \
+        <imap_host>
+        <email>
+```
+
+An example: fetching emails from gmail via IMAP.
+
+```
+easycli ~/client_secret.json \
+        https://mail.google.com/ \
+        https://accounts.google.com/o/oauth2/v2/auth \
+        https://accounts.google.com/o/oauth2/token \
+        imap.gmail.com \
+        myemail@gmail.com
+```
+
+Google cloud lets you download the `client_secret.json` after you register
+the application via Google Cloud Console.
+
