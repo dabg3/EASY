@@ -5,7 +5,7 @@ import base64
 import collections.abc
 
 
-class UnsafeFileStore:
+class UnsafeJSONFileStore:
 
     # userdata are stored by address in a json file with format
     #
@@ -31,27 +31,28 @@ class UnsafeFileStore:
         if not dir_path.is_dir():
             raise ValueError(f"not a directory: {path}")
         file_path = dir_path / 'userdata.json'
-        try:
-            with open(file_path, 'w') as f:
-                json.dump({}, f)
-            self._path = str(file_path)
-        except PermissionError:
-            raise PermissionError(f"restricted access: {path}")
-        except OSError as e:
-            raise ValueError(f"cannot create userdata.json in {path}: {str(e)}")
+        if not file_path.exists():
+            try:
+                with open(file_path, 'w') as f:
+                    json.dump({}, f)
+            except PermissionError:
+                raise PermissionError(f"restricted access: {path}")
+            except OSError as e:
+                raise ValueError(f"cannot create userdata.json in {path}: {str(e)}")
+        self._path = str(file_path)
 
-    def store(self, addr: str, addr_data: collections.abc.Buffer):
-        v = base64.b64encode(addr_data)
+    def store(self, addr: str, addr_data: str):
+        v = base64.b64encode(addr_data.encode()).decode()
         with open(self._path, 'r') as f:
             data = json.load(f)
         data[addr] = v
         with open(self._path, 'w') as f:
             json.dump(data, f)
 
-    def get(self, addr) -> collections.abc.Buffer | None:
+    def get(self, addr) -> str | None:
         with open(self._path, 'r') as f:
             data = json.load(f)
-        return base64.b64decode(data[addr]) \
+        return base64.b64decode(data[addr].encode()).decode() \
                if addr in data else None
 
 
