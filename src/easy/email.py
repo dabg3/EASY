@@ -20,7 +20,7 @@ class Authentication(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def authenticate(self, user: str) -> str:
+    def authenticate(self, user: str) -> collections.abc.Callable[[bytes], bytes]:
         pass
 
 
@@ -67,11 +67,13 @@ class OAuth2(Authentication):
         )
         return self._user_prompt(auth_url)
 
-    def authenticate(self, user: str) -> str:
+    def authenticate(self, user: str) -> collections.abc.Callable[[bytes], bytes]:
         auth_res = self._requestAuth()
         response = self._fetchToken(auth_res)
+        auth_string = f"user={user}\x01auth=Bearer {response['access_token']}\x01\x01"
+        authobject = lambda b: auth_string.encode()
         # TODO handle refresh token...
-        return user, response['access_token']
+        return authobject
 
     @classmethod
     def client(cls, conf: OAuthConf):
@@ -92,7 +94,7 @@ class ImapInbox():
 
     def fetch(
         self, *, batch_size=100
-    ) -> typing.Generator[list[email.message.Message]]:
+    ) -> typing.Generator[list[email.message.EmailMessage]]:
         # TODO handle exceptions
         status, data = self._imap.select('INBOX', readonly='True')
         if status != 'OK':
@@ -117,11 +119,10 @@ class ImapInbox():
             yield list(msgs)
     
     def authenticate(self, user: str, auth: Authentication):
-        user, token = auth.authenticate(user)
-        auth_string = f"user={user}\x01auth=Bearer {token}\x01\x01"
+        authobject = auth.authenticate(user)
         #self._imap.debug=100
         try:
-            self._imap.authenticate(auth.imapMechanism, lambda x: auth_string)
+            self._imap.authenticate(auth.imapMechanism, authobject)
             print('IMAP Successfully authenticated!')
         except imaplib.IMAP4.error as e:
             print(f"IMAP authentication failed: {e}")
