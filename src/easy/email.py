@@ -48,10 +48,6 @@ class OAuth2(Authentication):
             redirect_uri=conf.get('redirect_uri')
         )
 
-    @staticmethod
-    def is_client_public(conf: OAuthConf):
-        return 'client_secret' not in conf
-    
     @property
     def imapMechanism(self) -> str:
         return 'XOAUTH2'
@@ -59,8 +55,7 @@ class OAuth2(Authentication):
     def _fetchToken(self, auth_res: str):
         token = self._oauth.fetch_token(
             self._conf.get('token_uri'),
-            client_secret=self._conf.get('client_secret', None) \
-                          if not OAuth2.is_client_public(self._conf) else None,
+            client_secret=self._conf.get('client_secret', None),
             authorization_response=auth_res,
             include_client_id=True
         )
