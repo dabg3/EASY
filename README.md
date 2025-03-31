@@ -5,7 +5,7 @@ For instance, my primary (and only) use case is listing all the website I've reg
 I'm sure more use cases will emerge once that is done.
 
 How do I know which services I've registered to?<br>
-By classifying emails as 'sent-by-human' or 'sent-by-service' first of al.
+By classifying emails as 'sent-by-human' or 'sent-by-service' first of all.
 I've picked a bunch of features (`src/easy/features.py`) and I'm gonna train a binary classificator on those.
 Then some kind of analysis is required to filter services emails.
 
@@ -32,36 +32,66 @@ Build with
 python -m build .
 ```
 
+
+## Configuration
+
+A provider must be configured to authenticate properly. 
+Note: only authentication via oauth is supported right now, basic auth will be added in future.
+
+Gmail configuration `gmail-conf.json`, client is confidential and requires a secret 
+```json
+{
+    "client_id": "<assigned by the authorization server after registration>",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "redirect_uri": "https://localhost",
+    "scopes": [
+            "https://mail.google.com/"
+    ],
+    "client_secret": "<secret>"
+}
+```
+
+Outlook configuration `outlook-conf.json`, public client no secret
+```json
+
+{
+    "client_id": "<assigned after registration>",
+    "auth_uri": "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize",
+    "token_uri": "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
+    "redirect_uri": "https://localhost",
+    "scopes": [
+            "https://outlook.office.com/IMAP.AccessAsUser.All",
+            "https://outlook.office.com/User.Read"
+    ]
+}
+```
+
+
 ## Run
 
 Right now `easycli` is very bare-bones, it's relevant for testing instead of real usage. 
-There's no input arguments parsing yet, at the same time a bunch of inputs are required
-making the command cumbersome and quite long.
+There's no input arguments parsing yet, arguments follow a certain order.
 
-It's been only tested on gmail, while also implementing the oauth flow according 
-to gmail documentation. It's likely gmail is the only provider authenticating, 
-more providers are gonna be tested.
+It's been tested on gmail and outlook, other imap providers supporting 
+`SASL XOAUTH2` mechanism may work.
 
-```
-easycli <path to client_secret.json> \
-        <oauth_scope> \
-        <oauth_server_authorization_url> \
-        <oauth_server_token_url> \
-        <imap_host>
-        <email>
+Application must be registered on whatever identity platform you're using e.g. Entra ID to access outlook.
+See Register Application for references.
+
+```plain
+easycli <path to provider-conf.json> <imap_host> <email>
 ```
 
 An example: fetching emails from gmail via IMAP.
 
-```
-easycli ~/client_secret.json \
-        https://mail.google.com/ \
-        https://accounts.google.com/o/oauth2/v2/auth \
-        https://accounts.google.com/o/oauth2/token \
-        imap.gmail.com \
-        myemail@gmail.com
+```sh
+easycli ~/development/mail/gmail-conf.json imap.gmail.com myemail@gmail.com
 ```
 
-Google cloud lets you download the `client_secret.json` after you register
-the application via Google Cloud Console.
+### Register Application
+
+* [Google/Gmail](https://developers.google.com/identity/protocols/oauth2)
+* [Microsoft/Outlook](https://learn.microsoft.com/en-us/exchange/client-developer/legacy-protocols/how-to-authenticate-an-imap-pop-smtp-application-by-using-oauth)
+
 

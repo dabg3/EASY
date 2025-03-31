@@ -1,9 +1,13 @@
 import typing
 import abc
+import collections.abc
 import imaplib
 import email
 import email.message
 import email.policy
+import base64
+from requests_oauthlib import OAuth2Session
+
 
 
 # class Inbox(abc.ABC):
@@ -18,10 +22,94 @@ import email.policy
 #         pass
 
 
+class Authentication(abc.ABC):
+
+    def __init__(self):
+        pass
+
+    @property
+    @abc.abstractmethod
+    def imapMechanism(self) -> str:
+        pass
+
+    @abc.abstractmethod
+    def authenticate(self, user: str) -> str:
+        pass
+
+
+class OAuthConf(typing.TypedDict):
+    auth_uri: str
+    token_uri: str
+    client_id: str
+    scopes: list[str]
+    client_secret: str | None
+    redirect_uri: str
+
+
+class OAuth2(Authentication):
+
+    def __init__(
+        self,
+        conf: OAuthConf, 
+        user_prompt: collections.abc.Callable[[str], str],
+        *,
+        public_client: bool = False,
+    ):
+        self._conf = conf
+        self._user_prompt = user_prompt
+        self._public_client = public_client
+        self._oauth = OAuth2Session(
+            conf.get('client_id'),
+            scope=conf.get('scopes'),
+            redirect_uri=conf.get('redirect_uri')
+        )
+    
+    @property
+    def imapMechanism(self) -> str:
+        return 'XOAUTH2'
+
+    def _fetchToken(self, auth_res: str):
+        token = self._oauth.fetch_token(
+            self._conf.get('token_uri'),
+            client_secret=self._conf.get('client_secret') \
+                          if not self._public_client else None,
+            authorization_response=auth_res,
+            include_client_id=True
+        )
+        return token
+
+    def _requestAuth(self) -> str:
+        auth_url, state = self._oauth.authorization_url(
+                self._conf.get('auth_uri') 
+        )
+        return self._user_prompt(auth_url)
+
+    def authenticate(self, user: str) -> str:
+        auth_res = self._requestAuth()
+        response = self._fetchToken(auth_res)
+        # TODO handle refresh token...
+        return user, response['access_token']
+
+    @classmethod
+    def confidentialClient(cls, conf: OAuthConf):
+        return cls(conf, prompt_cli_handler_auth_url)
+
+    @classmethod
+    def publicClient(cls, conf: OAuthConf):
+        return cls(conf, prompt_cli_handler_auth_url, public_client=True)
+
+
+# interactive auth
+def prompt_cli_handler_auth_url(auth_url: str) -> str:
+    print(f'To authorize access go to \n\n{auth_url}\n')
+    auth_res = input('Enter the full callback URL\n')
+    return auth_res
+
+
 class ImapInbox():
 
     def __init__(self, host: str = None):
-        self._imap = imaplib.IMAP4_SSL(host)
+        self._imap = imaplib.IMAP4_SSL(host, 993)
 
     def fetch(
         self, *, batch_size=100
@@ -49,10 +137,12 @@ class ImapInbox():
             )
             yield list(msgs)
     
-    def authenticate(self, user: str, password: str):
-        auth_string = f"user={user}\x01auth=Bearer {password}\x01\x01"
+    def authenticate(self, user: str, auth: Authentication):
+        user, token = auth.authenticate(user)
+        auth_string = f"user={user}\x01auth=Bearer {token}\x01\x01"
+        #self._imap.debug=100
         try:
-            self._imap.authenticate('XOAUTH2', lambda x: auth_string)
+            self._imap.authenticate(auth.imapMechanism, lambda x: auth_string)
             print('IMAP Successfully authenticated!')
         except imaplib.IMAP4.error as e:
             print(f"IMAP authentication failed: {e}")
