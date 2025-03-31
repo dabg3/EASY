@@ -33,9 +33,7 @@ def main():
     # # TODO check access_token expiration, refresh
     # # inspect_token(userdata['access_token'])
     # test_token_validity(userdata['access_token'])
-    auth = easy.email.OAuth2.publicClient(oauth_conf) \
-           if not 'client_secret' in oauth_conf \
-           else easy.email.OAuth2.confidentialClient(oauth_conf)
+    auth = easy.email.OAuth2.client(oauth_conf)
     inbox = easy.email.ImapInbox(imap_host)
     inbox.authenticate(email, auth)
     for msg_batch in inbox.fetch():

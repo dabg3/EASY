@@ -9,19 +9,6 @@ import base64
 from requests_oauthlib import OAuth2Session
 
 
-
-# class Inbox(abc.ABC):
-# 
-#     @abc.abstractmethod
-#     def fetch(self, *, batch_size=100) -> typing.Generator[email.message.Message]:
-#         pass
-# 
-#     # just an idea
-#     @abc.abstractmethod
-#     def authenticate(self, user: str, password: str) -> None:
-#         pass
-
-
 class Authentication(abc.ABC):
 
     def __init__(self):
@@ -52,17 +39,18 @@ class OAuth2(Authentication):
         self,
         conf: OAuthConf, 
         user_prompt: collections.abc.Callable[[str], str],
-        *,
-        public_client: bool = False,
     ):
         self._conf = conf
         self._user_prompt = user_prompt
-        self._public_client = public_client
         self._oauth = OAuth2Session(
             conf.get('client_id'),
             scope=conf.get('scopes'),
             redirect_uri=conf.get('redirect_uri')
         )
+
+    @staticmethod
+    def is_client_public(conf: OAuthConf):
+        return 'client_secret' not in conf
     
     @property
     def imapMechanism(self) -> str:
@@ -71,8 +59,8 @@ class OAuth2(Authentication):
     def _fetchToken(self, auth_res: str):
         token = self._oauth.fetch_token(
             self._conf.get('token_uri'),
-            client_secret=self._conf.get('client_secret') \
-                          if not self._public_client else None,
+            client_secret=self._conf.get('client_secret', None) \
+                          if not OAuth2.is_client_public(self._conf) else None,
             authorization_response=auth_res,
             include_client_id=True
         )
@@ -91,12 +79,8 @@ class OAuth2(Authentication):
         return user, response['access_token']
 
     @classmethod
-    def confidentialClient(cls, conf: OAuthConf):
+    def client(cls, conf: OAuthConf):
         return cls(conf, prompt_cli_handler_auth_url)
-
-    @classmethod
-    def publicClient(cls, conf: OAuthConf):
-        return cls(conf, prompt_cli_handler_auth_url, public_client=True)
 
 
 # interactive auth
