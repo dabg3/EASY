@@ -21,10 +21,9 @@ class UnsafeJSONFileStore:
     # This class does not handle the inner encoding, that's up
     # to the caller.
 
-    def __init__(self, path: str):
-        # path represents the user data directory that MUST exists
+    def __init__(self, path: str = None):
         if not path:
-            raise ValueError('invalid path')
+            path = get_system_userdata_path()
         dir_path = pathlib.Path(path)
         if not dir_path.exists():
             raise ValueError(f"directory does not exist: {path}")
@@ -41,18 +40,18 @@ class UnsafeJSONFileStore:
                 raise ValueError(f"cannot create userdata.json in {path}: {str(e)}")
         self._path = str(file_path)
 
-    def store(self, addr: str, addr_data: str):
-        v = base64.b64encode(addr_data.encode()).decode()
+    def store(self, addr: str, addr_data: bytes):
+        v = base64.b64encode(addr_data).decode()
         with open(self._path, 'r') as f:
             data = json.load(f)
         data[addr] = v
         with open(self._path, 'w') as f:
             json.dump(data, f)
 
-    def get(self, addr) -> str | None:
+    def get(self, addr) -> bytes | None:
         with open(self._path, 'r') as f:
             data = json.load(f)
-        return base64.b64decode(data[addr].encode()).decode() \
+        return base64.b64decode(data[addr].encode()) \
                if addr in data else None
 
 

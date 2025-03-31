@@ -52,14 +52,14 @@ class OAuth2(Authentication):
     def imapMechanism(self) -> str:
         return 'XOAUTH2'
 
-    def _fetchToken(self, auth_res: str):
-        token = self._oauth.fetch_token(
+    def _fetchTokens(self, auth_res: str):
+        response = self._oauth.fetch_token(
             self._conf.get('token_uri'),
             client_secret=self._conf.get('client_secret', None),
             authorization_response=auth_res,
             include_client_id=True
         )
-        return token
+        return response 
 
     def _requestAuth(self) -> str:
         auth_url, state = self._oauth.authorization_url(
@@ -68,12 +68,21 @@ class OAuth2(Authentication):
         return self._user_prompt(auth_url)
 
     def authenticate(self, user: str) -> collections.abc.Callable[[bytes], bytes]:
-        auth_res = self._requestAuth()
-        response = self._fetchToken(auth_res)
+        response = self._load_auth_res(user)
+        if not response:
+            auth_res = self._requestAuth()
+            response = self._fetchTokens(auth_res)
+            self._store_auth_res(user, response)
+        # TODO check access token validity
         auth_string = f"user={user}\x01auth=Bearer {response['access_token']}\x01\x01"
         authobject = lambda b: auth_string.encode()
-        # TODO handle refresh token...
         return authobject
+
+    def _load_auth_res(self, user: str) -> dict:
+        pass
+
+    def _store_auth_res(self, user: str, data: dict):
+        pass
 
     @classmethod
     def client(cls, conf: OAuthConf):

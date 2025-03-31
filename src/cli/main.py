@@ -14,26 +14,33 @@ def load_json_from_file(filename):
         return None
 
 
+# poc
+class OAuth2TokenStore(easy.email.OAuth2):
+
+    def __init__(
+        self,
+        conf: easy.email.OAuthConf, 
+        user_prompt,
+    ):
+        super().__init__(conf, user_prompt)
+        self._store = cli.userdata.UnsafeJSONFileStore()
+
+    def _load_auth_res(self, user: str) -> dict:
+        json_res = self._store.get(user)
+        return json.loads(json_res.decode()) if json_res else None
+
+    def _store_auth_res(self, user: str, data: dict):
+        self._store.store(user, json.dumps(data).encode())
+    
+
 def main():
     # TODO proper options
     oauth_conf_filepath = sys.argv[1]
     imap_host = sys.argv[2]
     email = sys.argv[3]
-    # oauth client config
+
     oauth_conf = load_json_from_file(oauth_conf_filepath)
-    # userdata_store = cli.userdata.UnsafeJSONFileStore(
-         #cli.userdata.get_system_userdata_path()
-    # )
-    # userdata_json = userdata_store.get(email)
-    # userdata = json.loads(userdata_json) if userdata_json else None
-    # if not userdata:
-         #userdata = get_auth_tokens(oauth, oauth_conf)
-         #print(userdata)
-         #userdata_store.store(email, json.dumps(userdata))
-    # # TODO check access_token expiration, refresh
-    # # inspect_token(userdata['access_token'])
-    # test_token_validity(userdata['access_token'])
-    auth = easy.email.OAuth2.client(oauth_conf)
+    auth = OAuth2TokenStore.client(oauth_conf)
     inbox = easy.email.ImapInbox(imap_host)
     inbox.authenticate(email, auth)
     for msg_batch in inbox.fetch():
