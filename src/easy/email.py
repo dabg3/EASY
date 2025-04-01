@@ -145,6 +145,8 @@ class OAuth2(Authentication):
     def handle_auth_failure(self, user: str):
         # passing None equals delete 
         # TODO better api
+        # think about a succeed handler that would store working credentials, 
+        # instead of delete after failure
         self._store_auth_res(user, None)
 
     @classmethod
@@ -196,7 +198,6 @@ class ImapInbox():
             try:
                 authobject = auth.authenticate(user)
                 self._imap.authenticate(auth.imapMechanism, authobject)
-                auth.handle_auth_success()
                 return
             except imaplib.IMAP4.error as e:
                 auth.handle_auth_attempt_failure(user)

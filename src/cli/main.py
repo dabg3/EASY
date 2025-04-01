@@ -30,6 +30,7 @@ class OAuth2TokenStore(easy.email.OAuth2):
         return json.loads(json_res.decode()) if json_res else None
 
     def _store_auth_res(self, user: str, data: dict | None):
+        # temporary delete 
         if not data:
             self._store.delete(user)
         self._store.store(user, json.dumps(data).encode())

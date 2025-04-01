@@ -7,7 +7,7 @@ I'm sure more use cases will emerge once that is done.
 How do I know which services I've registered to?<br>
 By classifying emails as 'sent-by-human' or 'sent-by-service' first of all.
 I've picked a bunch of features (`src/easy/features.py`) and I'm gonna train a binary classificator on those.
-Then some kind of analysis is required to filter services emails.
+Then some kind of analysis is required to filter services emails further.
 
 If you like the project and you would like to contribute somehow (thought about another use cases? great), contact me, I appreciate :) 
 
@@ -38,7 +38,7 @@ python -m build .
 A provider must be configured to authenticate properly. 
 Note: only authentication via oauth is supported right now, basic auth will be added in future.
 
-Gmail configuration `gmail-conf.json`, client is confidential and requires a secret 
+`gmail-conf.json`, client is confidential and requires a secret 
 ```json
 {
     "client_id": "<assigned by the authorization server after registration>",
@@ -52,7 +52,7 @@ Gmail configuration `gmail-conf.json`, client is confidential and requires a sec
 }
 ```
 
-Outlook configuration `outlook-conf.json`, public client no secret
+`outlook-conf.json`: public client no secret, `offline_access` for getting a refresh token
 ```json
 
 {
@@ -62,7 +62,7 @@ Outlook configuration `outlook-conf.json`, public client no secret
     "redirect_uri": "https://localhost",
     "scopes": [
             "https://outlook.office.com/IMAP.AccessAsUser.All",
-            "https://outlook.office.com/User.Read"
+            "offline_access"
     ]
 }
 ```
@@ -83,10 +83,24 @@ See Register Application for references.
 easycli <path to provider-conf.json> <imap_host> <email>
 ```
 
-An example: fetching emails from gmail via IMAP.
+Example: fetching emails from gmail via IMAP.
 
 ```sh
-easycli ~/development/mail/gmail-conf.json imap.gmail.com myemail@gmail.com
+easycli gmail-conf.json imap.gmail.com myemail@gmail.com
+```
+
+### Known Issues
+
+Under certain conditions a provider may add more scopes in the access token, 
+beside those specified as request parameter.
+
+This behaviour makes `requests-oauthlib` throws a _scope has changed_ error and authentication won't succeed.
+
+Fix it by just setting `OAUTHLIB_RELAX_TOKEN_SCOPE` env var
+
+Example: avoid mismatching scopes error
+```sh
+OAUTHLIB_RELAX_TOKEN_SCOPE=1 easycli outlook-conf.json outlook.office365.com myemail@hotmail.com
 ```
 
 ### Register Application
