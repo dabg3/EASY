@@ -7,6 +7,30 @@ import email.message
 import email.policy
 import base64
 from requests_oauthlib import OAuth2Session
+import time
+
+class BaseStorage(abc.ABC):
+
+    @abc.abstractmethod
+    def load(self, user: str) -> dict | None:
+        pass
+
+    @abc.abstractmethod
+    def store(self, user: str, data: dict):
+        pass
+
+
+class MemoryStorage(BaseStorage):
+    """Default in-memory storage"""
+
+    def __init__(self):
+        self._data = {}
+
+    def load(self, user: str) -> dict | None:
+        return self._data.get(user)
+
+    def store(self, user: str, data: dict):
+        self._data[user] = data
 
 
 class Authentication(abc.ABC):
@@ -23,10 +47,17 @@ class Authentication(abc.ABC):
     def authenticate(self, user: str) -> collections.abc.Callable[[bytes], bytes]:
         pass
 
+    @abc.abstractmethod
+    def handle_auth_failure(self, user: str, error: Exception) -> bool:
+        """Return True if retry should be attempted."""
+        pass
+
+
 
 class OAuthConf(typing.TypedDict):
     auth_uri: str
     token_uri: str
+    refresh_uri: str | None
     client_id: str
     scopes: list[str]
     client_secret: str | None
@@ -42,6 +73,7 @@ class OAuth2(Authentication):
     ):
         self._conf = conf
         self._user_prompt = user_prompt
+        # TODO here I can pass token state (token=load_...)
         self._oauth = OAuth2Session(
             conf.get('client_id'),
             scope=conf.get('scopes'),
@@ -73,7 +105,8 @@ class OAuth2(Authentication):
             auth_res = self._requestAuth()
             response = self._fetchTokens(auth_res)
             self._store_auth_res(user, response)
-        # TODO check access token validity
+        if 'expires_at' in response and time.time() > response['expires_at']:
+            self._refresh(user)
         auth_string = f"user={user}\x01auth=Bearer {response['access_token']}\x01\x01"
         authobject = lambda b: auth_string.encode()
         return authobject
@@ -83,6 +116,23 @@ class OAuth2(Authentication):
 
     def _store_auth_res(self, user: str, data: dict):
         pass
+
+    def _refresh(self, user: str):
+        auth_res = self._load_auth_res(user)
+        refresh_uri = self._conf['refresh_uri'] if self._conf.get('refresh_uri') \
+                                                else self._conf['token_uri']
+        response = self._oauth.refresh_token(
+            refresh_uri, 
+            refresh_token=auth_res['refresh_token'],
+            include_client_id=True,
+            client_id=self._conf.get('client_id'),
+            client_secret=self._conf.get('client_secret', None),
+        )
+        self._store_auth_res(user, response)
+
+    def handle_auth_failure(self, user: str, error: Exception) -> bool:
+        self._refresh(user)
+        return True
 
     @classmethod
     def client(cls, conf: OAuthConf):
@@ -127,11 +177,21 @@ class ImapInbox():
             )
             yield list(msgs)
     
-    def authenticate(self, user: str, auth: Authentication):
-        authobject = auth.authenticate(user)
-        #self._imap.debug=100
-        try:
-            self._imap.authenticate(auth.imapMechanism, authobject)
-            print('IMAP Successfully authenticated!')
-        except imaplib.IMAP4.error as e:
-            print(f"IMAP authentication failed: {e}")
+
+    def authenticate(self, user: str, auth: Authentication, max_retries: int = 1):
+        for attempt in range(max_retries + 1):
+            try:
+                authobject = auth.authenticate(user)
+                self._imap.authenticate(auth.imapMechanism, authobject)
+                return
+            except imaplib.IMAP4.error as e:
+                if attempt == max_retries:
+                    break
+                auth.handle_auth_failure(user, e)
+        # TODO better exception
+        raise Exception(
+            f"Failed to authenticate after {attempt} attempts"
+        )
+        #raise IMAPAuthError(
+        #    f"Failed to authenticate after {attempt} attempts"
+        #)
