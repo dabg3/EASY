@@ -1,25 +1,14 @@
 import os
 import pathlib
-import json
 import base64
 import collections.abc
+import hashlib
 
 
-class UnsafeJSONFileStore:
+class UnsafeFileStore:
 
-    # userdata are stored by address in a json file with format
-    #
-    # {
-    #     "address1": "base64-encoded-value",
-    #     "address2": "base64-encoded-value",
-    #     ...
-    # } 
-    #
-    # the 'base64-encoded-value' could represent anything.
-    # In case it is a json-encoded object, 
-    # the base64 value would be encoded as base64(json(obj)).
-    # This class does not handle the inner encoding, that's up
-    # to the caller.
+    # A file is created for each address, having filename as sha256(address).
+    # Content is base64-encoded, it can be anything.
 
     def __init__(self, path: str = None):
         if not path:
@@ -29,36 +18,44 @@ class UnsafeJSONFileStore:
             raise ValueError(f"directory does not exist: {path}")
         if not dir_path.is_dir():
             raise ValueError(f"not a directory: {path}")
-        file_path = dir_path / 'userdata.json'
-        if not file_path.exists():
-            try:
-                with open(file_path, 'w') as f:
-                    json.dump({}, f)
-            except PermissionError:
-                raise PermissionError(f"restricted access: {path}")
-            except OSError as e:
-                raise ValueError(f"cannot create userdata.json in {path}: {str(e)}")
-        self._path = str(file_path)
+        self._datapath = dir_path
 
-    def store(self, addr: str, addr_data: bytes):
-        v = base64.b64encode(addr_data).decode()
-        with open(self._path, 'r') as f:
-            data = json.load(f)
-        data[addr] = v
-        with open(self._path, 'w') as f:
-            json.dump(data, f)
+    def store(self, addr: str, data: bytes):
+        filename = hashlib.sha256(addr.encode()).hexdigest()
+        filepath = self._datapath / filename
+        v = base64.b64encode(data).decode()
+        self._secure_write(filepath, v)
+        
+    @staticmethod
+    def _secure_write(path: pathlib.Path, data: bytes):
+        try:
+            with open(path, 'w') as f:
+                f.write(data)
+        except PermissionError:
+            raise PermissionError(f"restricted access: {path}")
+        except OSError as e:
+            raise ValueError(f"cannot write {path}: {str(e)}")
 
     def get(self, addr) -> bytes | None:
-        with open(self._path, 'r') as f:
-            data = json.load(f)
-        return base64.b64decode(data[addr].encode()) \
-               if addr in data else None
+        filename = hashlib.sha256(addr.encode()).hexdigest()
+        filepath = self._datapath / filename
+        if not filepath.exists():
+            return None
+        with open(filepath, 'r') as f:
+            data = f.read()
+        return base64.b64decode(data.encode())
+
+    def delete(self, addr: str):
+        filename = hashlib.sha256(addr.encode()).hexdigest()
+        filepath = self._datapath / filename
+        filepath.unlink(missing_ok=True)
 
 
 # TODO define on a central location then inject it
 _appname = 'easy'
 
 
+# TODO take a create= param 
 def get_system_userdata_path() -> str: 
     """
     TODO

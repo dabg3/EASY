@@ -6,7 +6,7 @@ import html.parser
 
 # TODO all features that require 'walking' the body parts
 #   can be written better to improve performance.
-#   Right now every evaluation 'walks'.
+#   Right now every evaluation 'walks' making the process inefficient.
 
 
 def evaluate(msg: email.message.EmailMessage) -> dict | None:
@@ -98,7 +98,7 @@ def _size_bytes(s: str, charset: str | None) -> int:
     return len(s.encode(charset))
 
 
-class LinkCounter(html.parser.HTMLParser):
+class SelfRefLinkCounter(html.parser.HTMLParser):
 
     def __init__(self, domain):
         super().__init__()
@@ -118,7 +118,7 @@ class LinkCounter(html.parser.HTMLParser):
 def _count_self_ref_links(msg: email.message.EmailMessage) -> int:
     from_email = email.utils.getaddresses(msg.get_all('from', []))[0][1]
     domain = _extract_email_second_lvl_domain(from_email)
-    parser = LinkCounter(domain)
+    parser = SelfRefLinkCounter(domain)
     for p in msg.walk():
         if not p.get_content_type() == 'text/html':
             continue

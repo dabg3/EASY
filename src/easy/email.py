@@ -9,6 +9,8 @@ import base64
 from requests_oauthlib import OAuth2Session
 import time
 
+# ideas for the future
+
 class BaseStorage(abc.ABC):
 
     @abc.abstractmethod
@@ -32,6 +34,8 @@ class MemoryStorage(BaseStorage):
     def store(self, user: str, data: dict):
         self._data[user] = data
 
+##
+
 
 class Authentication(abc.ABC):
 
@@ -47,11 +51,15 @@ class Authentication(abc.ABC):
     def authenticate(self, user: str) -> collections.abc.Callable[[bytes], bytes]:
         pass
 
+    # pass error as argument ?
     @abc.abstractmethod
-    def handle_auth_failure(self, user: str, error: Exception) -> bool:
-        """Return True if retry should be attempted."""
+    def handle_auth_attempt_failure(self, user: str) -> bool:
+        """Return True if retry should be attempted. (may change)"""
         pass
 
+    @abc.abstractmethod
+    def handle_auth_failure(self, user: str):
+        pass
 
 
 class OAuthConf(typing.TypedDict):
@@ -106,7 +114,7 @@ class OAuth2(Authentication):
             response = self._fetchTokens(auth_res)
             self._store_auth_res(user, response)
         if 'expires_at' in response and time.time() > response['expires_at']:
-            self._refresh(user)
+            self.refresh(user)
         auth_string = f"user={user}\x01auth=Bearer {response['access_token']}\x01\x01"
         authobject = lambda b: auth_string.encode()
         return authobject
@@ -117,7 +125,7 @@ class OAuth2(Authentication):
     def _store_auth_res(self, user: str, data: dict):
         pass
 
-    def _refresh(self, user: str):
+    def refresh(self, user: str):
         auth_res = self._load_auth_res(user)
         refresh_uri = self._conf['refresh_uri'] if self._conf.get('refresh_uri') \
                                                 else self._conf['token_uri']
@@ -130,9 +138,14 @@ class OAuth2(Authentication):
         )
         self._store_auth_res(user, response)
 
-    def handle_auth_failure(self, user: str, error: Exception) -> bool:
-        self._refresh(user)
+    def handle_auth_attempt_failure(self, user: str) -> bool:
+        self.refresh(user)
         return True
+
+    def handle_auth_failure(self, user: str):
+        # passing None equals delete 
+        # TODO better api
+        self._store_auth_res(user, None)
 
     @classmethod
     def client(cls, conf: OAuthConf):
@@ -179,19 +192,16 @@ class ImapInbox():
     
 
     def authenticate(self, user: str, auth: Authentication, max_retries: int = 1):
-        for attempt in range(max_retries + 1):
+        for attempt in range(1, max_retries + 2):
             try:
                 authobject = auth.authenticate(user)
                 self._imap.authenticate(auth.imapMechanism, authobject)
+                auth.handle_auth_success()
                 return
             except imaplib.IMAP4.error as e:
-                if attempt == max_retries:
-                    break
-                auth.handle_auth_failure(user, e)
+                auth.handle_auth_attempt_failure(user)
+        auth.handle_auth_failure(user)
         # TODO better exception
         raise Exception(
             f"Failed to authenticate after {attempt} attempts"
         )
-        #raise IMAPAuthError(
-        #    f"Failed to authenticate after {attempt} attempts"
-        #)

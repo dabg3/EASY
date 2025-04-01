@@ -23,16 +23,19 @@ class OAuth2TokenStore(easy.email.OAuth2):
         user_prompt,
     ):
         super().__init__(conf, user_prompt)
-        self._store = cli.userdata.UnsafeJSONFileStore()
+        self._store = cli.userdata.UnsafeFileStore()
 
     def _load_auth_res(self, user: str) -> dict:
         json_res = self._store.get(user)
         return json.loads(json_res.decode()) if json_res else None
 
-    def _store_auth_res(self, user: str, data: dict):
+    def _store_auth_res(self, user: str, data: dict | None):
+        if not data:
+            self._store.delete(user)
         self._store.store(user, json.dumps(data).encode())
     
 
+import pprint
 def main():
     # TODO proper options
     oauth_conf_filepath = sys.argv[1]
@@ -47,7 +50,7 @@ def main():
         for msg in msg_batch:
             f = easy.features.evaluate(msg)
             # TODO prediction
-            print(f)
+            pprint.pp(f)
 
 
 if __name__ == "__main__":
