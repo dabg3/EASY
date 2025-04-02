@@ -5,12 +5,15 @@ import cli.userdata
 import easy.email
 import easy.features
 
+class OauthProviderConf(easy.email.OAuthConf, easy.email.ImapConf):
+    pass
 
-def load_json_from_file(filename):
+def load_conf_from_file(filename) -> OauthProviderConf:
     try:
         with open(filename, 'r') as f:
             return json.load(f)
     except FileNotFoundError:
+        # TODO exception
         return None
 
 
@@ -34,18 +37,19 @@ class OAuth2TokenStore(easy.email.OAuth2):
         if not data:
             self._store.delete(user)
         self._store.store(user, json.dumps(data).encode())
+
+
     
 
 import pprint
 def main():
     # TODO proper options
-    oauth_conf_filepath = sys.argv[1]
-    imap_host = sys.argv[2]
-    email = sys.argv[3]
+    provider_conf_path = sys.argv[1]
+    email = sys.argv[2]
 
-    oauth_conf = load_json_from_file(oauth_conf_filepath)
-    auth = OAuth2TokenStore.client(oauth_conf)
-    inbox = easy.email.ImapInbox(imap_host)
+    provider_conf = load_conf_from_file(provider_conf_path)
+    auth = OAuth2TokenStore.client(provider_conf)
+    inbox = easy.email.ImapInbox(provider_conf)
     inbox.authenticate(email, auth)
     for msg_batch in inbox.fetch():
         for msg in msg_batch:

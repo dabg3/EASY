@@ -38,7 +38,7 @@ python -m build .
 A provider must be configured to authenticate properly. 
 Note: only authentication via oauth is supported right now, basic auth will be added in future.
 
-`gmail-conf.json`, client is confidential and requires a secret 
+`gmail-conf.json`: client is confidential and requires a secret 
 ```json
 {
     "client_id": "<assigned by the authorization server after registration>",
@@ -48,7 +48,9 @@ Note: only authentication via oauth is supported right now, basic auth will be a
     "scopes": [
             "https://mail.google.com/"
     ],
-    "client_secret": "<secret>"
+    "client_secret": "<secret>",
+    "imap_server": "imap.gmail.com",
+    "imap_port": 993
 }
 ```
 
@@ -63,7 +65,9 @@ Note: only authentication via oauth is supported right now, basic auth will be a
     "scopes": [
             "https://outlook.office.com/IMAP.AccessAsUser.All",
             "offline_access"
-    ]
+    ],
+    "imap_server": "outlook.office365.com",
+    "imap_port": 993
 }
 ```
 
@@ -86,7 +90,7 @@ easycli <path to provider-conf.json> <imap_host> <email>
 Example: fetching emails from gmail via IMAP.
 
 ```sh
-easycli gmail-conf.json imap.gmail.com myemail@gmail.com
+easycli gmail-conf.json myemail@gmail.com
 ```
 
 ### Known Issues
@@ -100,7 +104,7 @@ Fix it by just setting `OAUTHLIB_RELAX_TOKEN_SCOPE` env var
 
 Example: avoid mismatching scopes error
 ```sh
-OAUTHLIB_RELAX_TOKEN_SCOPE=1 easycli outlook-conf.json outlook.office365.com myemail@hotmail.com
+OAUTHLIB_RELAX_TOKEN_SCOPE=1 easycli outlook-conf.json myemail@hotmail.com
 ```
 
 ### Register Application

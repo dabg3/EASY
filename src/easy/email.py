@@ -161,10 +161,16 @@ def prompt_cli_handler_auth_url(auth_url: str) -> str:
     return auth_res
 
 
+class ImapConf(typing.TypedDict):
+    imap_server: str
+    imap_port: int
+    # ssl: bool
+
+
 class ImapInbox():
 
-    def __init__(self, host: str = None):
-        self._imap = imaplib.IMAP4_SSL(host, 993)
+    def __init__(self, conf: ImapConf):
+        self._imap = imaplib.IMAP4_SSL(conf['imap_server'], conf['imap_port'])
 
     def fetch(
         self, *, batch_size=100
@@ -192,7 +198,6 @@ class ImapInbox():
             )
             yield list(msgs)
     
-
     def authenticate(self, user: str, auth: Authentication, max_retries: int = 1):
         for attempt in range(1, max_retries + 2):
             try:

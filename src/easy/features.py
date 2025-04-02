@@ -1,19 +1,33 @@
+import typing
 import email.message
 import email.utils
 import re
 import html.parser
 
+class Features(typing.TypedDict):
+    has_list_unsubscribe: typing.Literal[0, 1]
+    has_list_id: typing.Literal[0, 1]
+    has_precedence: typing.Literal[0, 1]
+    has_feedback_id: typing.Literal[0, 1]
+    has_mailer: typing.Literal[0, 1]
+    has_campaign: typing.Literal[0, 1]
+    has_csa_complaints: typing.Literal[0, 1]
+    is_replyto_equal_from: typing.Literal[0, 1]
+    recipients_count: int
+    media_html_ratio: float
+    self_ref_links_count: int
+    has_attachment: typing.Literal[0, 1]
 
 # TODO all features that require 'walking' the body parts
 #   can be written better to improve performance.
 #   Right now every evaluation 'walks' making the process inefficient.
 
 
-def evaluate(msg: email.message.EmailMessage) -> dict | None:
+def evaluate(msg: email.message.EmailMessage) -> Features | None:
     if msg is None:
         return None
     try:
-        features = {}
+        features: Features = {}
         # headers presence features
         features['has_list_unsubscribe'] = 1 if msg.get('list-unsubscribe') else 0
         features['has_list_id'] = 1 if msg.get('list-id') else 0
