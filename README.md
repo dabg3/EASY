@@ -13,7 +13,9 @@ If you like the project and you would like to contribute somehow (thought about 
 
 ## Development 
 
-Install venv `python -m venv venv`
+Install venv `python -m venv venv` and activate `source venv/bin/activate`
+
+Install dependencies `pip install -r requirements.txt`
 
 This project uses the [src layout](https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/), 
 it requires packages installed in development mode for tests to work
