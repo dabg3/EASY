@@ -86,7 +86,7 @@ Application must be registered on whatever identity platform you're using e.g. E
 See Register Application for references.
 
 ```plain
-easycli <path to provider-conf.json> <imap_host> <email>
+easycli <path to provider-conf.json> <email>
 ```
 
 Example: fetching emails from gmail via IMAP.
