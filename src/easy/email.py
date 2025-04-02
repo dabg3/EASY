@@ -174,7 +174,7 @@ class ImapInbox():
 
     def fetch(
         self, *, batch_size=100
-    ) -> typing.Generator[list[email.message.EmailMessage]]:
+    ) -> typing.Generator[list[email.message.EmailMessage], None, None]:
         # TODO handle exceptions
         status, data = self._imap.select('INBOX', readonly='True')
         if status != 'OK':

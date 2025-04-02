@@ -46,7 +46,6 @@ def main():
     # TODO proper options
     provider_conf_path = sys.argv[1]
     email = sys.argv[2]
-
     provider_conf = load_conf_from_file(provider_conf_path)
     auth = OAuth2TokenStore.client(provider_conf)
     inbox = easy.email.ImapInbox(provider_conf)
