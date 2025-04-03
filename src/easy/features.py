@@ -42,11 +42,13 @@ def evaluate(msg: email.message.EmailMessage) -> Features | None:
         features['recipients_count'] = _count_recipients(msg)
         # body value features
         features['media_html_ratio'] = _calculate_media_html_ratio(msg)
+        # TODO html_style_ratio: how much styling ?
         features['self_ref_links_count'] = _count_self_ref_links(msg)
         features['has_attachment'] = 1 if _has_attachment(msg) else 0
         return features
     except Exception as e:
         print('error:', e)
+        print('caused by msg:', msg.get('message-id'))
         # TODO log
         return None
 
@@ -76,6 +78,7 @@ def _count_recipients(msg: email.message.EmailMessage) -> int:
     # That's good because a service mail won't likely have any 'resent-' field,
     # so human emails would have an higher amount of recipients just because of 
     # that duplication.
+    # update: actually resent headers are not used that much.
     tos = msg.get_all('to', [])
     ccs = msg.get_all('cc', [])
     resent_tos = msg.get_all('resent-to', [])
@@ -83,7 +86,31 @@ def _count_recipients(msg: email.message.EmailMessage) -> int:
     return len(email.utils.getaddresses(tos + ccs + resent_tos + resent_ccs))
 
 
-def _calculate_media_html_ratio(msg: email.message.EmailMessage) -> float:
+class HtmlValidator(html.parser.HTMLParser):
+
+    _tags = ['html', 'head', 'body']
+    # valid html stack would be:
+    # [ html, head, head, body, body, html ]
+    _stack: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self._tags:
+            self._stack.append(tag)
+
+    def handle_endtag(self, tag):
+        if tag in self._tags:
+            self._stack.append(tag)
+
+    def is_valid(self) -> bool:
+        return self._stack == ['html', 'head', 'head', 'body', 'body', 'html']
+
+
+import math
+def _calculate_media_html_ratio(
+    msg: email.message.EmailMessage, 
+    threshold: float = 0.2,
+    steepness: float = 15
+) -> float:
     # return a value between 0..1 (i.e html_only...media_only)
     media_bytes = 0
     html_bytes = 0
@@ -94,16 +121,28 @@ def _calculate_media_html_ratio(msg: email.message.EmailMessage) -> float:
         elif p.get_content_maintype() == 'text' \
         and 'html' in p.get_content_subtype():
             html_bytes += _size_bytes(p.get_content(), p.get_content_charset())
+        elif isinstance(p.get_content(), bytes):
+            media_bytes += len(p.get_content())
         else:
-            # any content-type that is not html is likely to be user content
-            # i.e plain, image, pdf....
-            media_bytes += len(p.get_content()) \
-                           if isinstance(p.get_content(), bytes) \
-                           else _size_bytes(p.get_content(), p.get_content_charset())
+            # prevent html declared as plain text
+            html_validator = HtmlValidator()
+            html_validator.feed(p.get_content())
+            if html_validator.is_valid():
+                html_bytes += _size_bytes(p.get_content(), p.get_content_charset())
+            else:
+                # any content-type that is text but not html 
+                media_bytes += _size_bytes(
+                    clean_text(p.get_content()), 
+                    p.get_content_charset()
+                )
     sum_bytes = media_bytes + html_bytes
     if sum_bytes == 0:
         raise ValueError("unexpected body content")
-    return media_bytes / (sum_bytes)
+    ratio = media_bytes / sum_bytes
+    if ratio == 0 or ratio == 1:
+        return ratio
+    # Apply sigmoid scaling to polarize middle values
+    return 1 / (1 + math.exp(-steepness * (ratio - threshold)))
 
 
 def _size_bytes(s: str, charset: str | None) -> int:
@@ -111,6 +150,24 @@ def _size_bytes(s: str, charset: str | None) -> int:
         charset = 'utf-8'
     return len(s.encode(charset))
 
+
+def clean_text(text: str) -> str:
+    # replace all whitespace (spaces, newlines, tabs) with a single space
+    text = re.sub(r'\s+', ' ', text.strip())
+    return text
+
+
+class StyleContentFinder(html.parser.HTMLParser):
+    # TODO
+    def handle_starttag(self, tag, attrs):
+        pass
+
+    def handle_endtag(self, tag):
+        pass
+
+    def handle_data(self, data) -> bool:
+        pass
+        
 
 class SelfRefLinkCounter(html.parser.HTMLParser):
 

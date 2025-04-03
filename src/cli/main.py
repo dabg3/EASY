@@ -37,8 +37,6 @@ class OAuth2TokenStore(easy.email.OAuth2):
         if not data:
             self._store.delete(user)
         self._store.store(user, json.dumps(data).encode())
-
-
     
 
 import pprint
