@@ -42,7 +42,7 @@ def evaluate(msg: email.message.EmailMessage) -> Features | None:
         features['recipients_count'] = _count_recipients(msg)
         # body value features
         features['media_html_ratio'] = _calculate_media_html_ratio(msg)
-        # TODO html_style_ratio: how much styling ?
+        features['html_style_ratio'] = _calculate_html_style_ratio(msg)
         features['self_ref_links_count'] = _count_self_ref_links(msg)
         features['has_attachment'] = 1 if _has_attachment(msg) else 0
         return features
@@ -89,9 +89,12 @@ def _count_recipients(msg: email.message.EmailMessage) -> int:
 class HtmlValidator(html.parser.HTMLParser):
 
     _tags = ['html', 'head', 'body']
-    # valid html stack would be:
-    # [ html, head, head, body, body, html ]
-    _stack: list[str] = []
+
+    def __init__(self):
+        super().__init__()
+        # valid html stack would be:
+        # [ html, head, head, body, body, html ]
+        self._stack: list[str] = []
 
     def handle_starttag(self, tag, attrs):
         if tag in self._tags:
@@ -145,7 +148,7 @@ def _calculate_media_html_ratio(
     return 1 / (1 + math.exp(-steepness * (ratio - threshold)))
 
 
-def _size_bytes(s: str, charset: str | None) -> int:
+def _size_bytes(s: str, charset: str | None = None) -> int:
     if charset is None:
         charset = 'utf-8'
     return len(s.encode(charset))
@@ -158,16 +161,73 @@ def clean_text(text: str) -> str:
 
 
 class StyleContentFinder(html.parser.HTMLParser):
-    # TODO
+    
+    def __init__(self):
+        super().__init__()
+        self._content: str = ''
+        self._style_data_next: bool = False
+
     def handle_starttag(self, tag, attrs):
-        pass
+        a_content = self._extract_style_attribute_content(attrs)
+        self._content += a_content
+        if not tag == 'style':
+            return
+        self._style_data_next = True
+
+    @staticmethod
+    def _extract_style_attribute_content(attrs) -> str:
+        for a,v in attrs:
+            if not a == 'style':
+                continue
+            return v if v else ''
+        return ''
 
     def handle_endtag(self, tag):
-        pass
+        if tag == 'style':
+            self._style_data_next = False
 
     def handle_data(self, data) -> bool:
-        pass
+        if not self._style_data_next:
+            return
+        self._content += data
+
+    def get_content(self) -> str:
+        return self._content
         
+
+# TODO avoid duplicating code, think about a valid abstraction
+def _calculate_html_style_ratio(
+    msg: email.message.EmailMessage, 
+) -> float:
+    # return a value between 0..1 (i.e html_only...style_only)
+    html_bytes = 0
+    # multipart can be laid out hierarchically
+    style_finder = StyleContentFinder()
+    for p in msg.walk():
+        if p.is_multipart():
+            continue
+        elif p.get_content_maintype() == 'text' \
+        and 'html' in p.get_content_subtype():
+            html_bytes += _size_bytes(p.get_content(), p.get_content_charset())
+            style_finder.feed(p.get_content())
+        elif isinstance(p.get_content(), bytes):
+            continue
+        else:
+            # prevent html declared as plain text
+            html_validator = HtmlValidator()
+            html_validator.feed(p.get_content())
+            if not html_validator.is_valid():
+                continue
+            html_bytes += _size_bytes(p.get_content(), p.get_content_charset())
+            style_finder.feed(p.get_content())
+    style_bytes = _size_bytes(style_finder.get_content())
+    sum_bytes = style_bytes + html_bytes
+    if sum_bytes == 0:
+        # no html
+        return 1.0
+    ratio = style_bytes / sum_bytes
+    return style_bytes / (sum_bytes)
+
 
 class SelfRefLinkCounter(html.parser.HTMLParser):
 
@@ -218,12 +278,3 @@ def _has_attachment(msg: email.message.EmailMessage) -> bool:
         elif p.get_content_disposition().startswith('attachment'):
             return True
     return False
-
-
-def label_automatically(features: list[dict]) -> list[str]:
-    """Analyze features to label an email as 'sent-by-human' or 'sent-by-service'
-    according to a set of heuristics   
-
-    :return: list of labels as int: 0 -> human, 1 -> service 
-    """
-    return 
