@@ -42,7 +42,7 @@ def evaluate(msg: email.message.EmailMessage) -> Features | None:
         features['recipients_count'] = _count_recipients(msg)
         # body value features
         features['media_html_ratio'] = _calculate_media_html_ratio(msg)
-        features['html_style_ratio'] = _calculate_html_style_ratio(msg)
+        features['style_ratio'] = _calculate_html_style_ratio(msg)
         features['self_ref_links_count'] = _count_self_ref_links(msg)
         features['has_attachment'] = 1 if _has_attachment(msg) else 0
         return features
@@ -195,11 +195,13 @@ class StyleContentFinder(html.parser.HTMLParser):
         return self._content
         
 
-# TODO avoid duplicating code, think about a valid abstraction
+# TODO avoid duplicating code, think about a valid abstraction.
+#   right now performance can be improved a lot
 def _calculate_html_style_ratio(
     msg: email.message.EmailMessage, 
+    exponent: float = 0.3
 ) -> float:
-    # return a value between 0..1 (i.e html_only...style_only)
+    # return a value between 0..1 (i.e no-html/html_only...style_only)
     html_bytes = 0
     # multipart can be laid out hierarchically
     style_finder = StyleContentFinder()
@@ -223,10 +225,11 @@ def _calculate_html_style_ratio(
     style_bytes = _size_bytes(style_finder.get_content())
     sum_bytes = style_bytes + html_bytes
     if sum_bytes == 0:
-        # no html
-        return 1.0
+        # no html, content is only 'media'
+        # html_media_ratio = 1 when style_ratio = 0
+        return 0.0
     ratio = style_bytes / sum_bytes
-    return style_bytes / (sum_bytes)
+    return ratio ** exponent
 
 
 class SelfRefLinkCounter(html.parser.HTMLParser):
@@ -251,6 +254,9 @@ def _count_self_ref_links(msg: email.message.EmailMessage) -> int:
     domain = _extract_email_second_lvl_domain(from_email)
     parser = SelfRefLinkCounter(domain)
     for p in msg.walk():
+        # TODO html may be hidden as plain text,
+        #   'walking' the body parts should be encapsulated somewhere.
+        # 
         if not p.get_content_type() == 'text/html':
             continue
         parser.feed(p.get_content())

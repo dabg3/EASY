@@ -38,7 +38,20 @@ class OAuth2TokenStore(easy.email.OAuth2):
             self._store.delete(user)
         self._store.store(user, json.dumps(data).encode())
     
-
+# TODO
+# interface
+#   `easycli <source> --user= <command>` 
+# sources:
+#   - provider matching conf.json
+#   - mbox
+#   - files for train/predict
+# easycli commands:
+#   - `mkdata --mbox | --features | --label | --visual <output>`
+#   - `train <output>`
+#   - `predict --weights=`
+#
+# `easycli local . predict`
+# `easycli `
 import pprint
 def main():
     # TODO proper options
