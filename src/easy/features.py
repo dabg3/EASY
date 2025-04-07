@@ -42,7 +42,7 @@ def evaluate(msg: email.message.EmailMessage) -> Features | None:
         features['recipients_count'] = _count_recipients(msg)
         # body value features
         features['media_html_ratio'] = _calculate_media_html_ratio(msg)
-        features['style_ratio'] = _calculate_html_style_ratio(msg)
+        features['html_style_ratio'] = _calculate_html_style_ratio(msg)
         features['self_ref_links_count'] = _count_self_ref_links(msg)
         features['has_attachment'] = 1 if _has_attachment(msg) else 0
         return features
