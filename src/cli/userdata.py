@@ -4,7 +4,6 @@ import base64
 import collections.abc
 import hashlib
 
-
 class UnsafeFileStore:
 
     # A file is created for each address, having filename as sha256(address).
@@ -66,7 +65,7 @@ def get_system_userdata_path() -> str:
         return _get_win_userdata_path()
     else:
         raise NotImplementedError('unknown system')
-
+        
 
 def _get_posix_userdata_path() -> str:
     # follows XDG Base Directory Specification, defaults to ~/.local/share/easy
@@ -84,6 +83,43 @@ def _get_win_userdata_path() -> str:
     local_app_data = os.getenv('LOCALAPPDATA')
     if local_app_data:
         data_dir = pathlib.Path(local_app_data) / _appname
+    else:
+        data_dir = pathlib.Path.home() / 'AppData' / 'Local' / _appname
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return str(data_dir)
+
+
+## App config (this code is likely to be moved elsewhere, otherwise module should be renamed)
+## Duplicated code to avoid premature abstractions
+
+
+# TODO take a create= param 
+def get_system_appconfig_path() -> str: 
+    """
+    TODO
+    """
+    if os.name == 'posix':
+        return _get_posix_appconfig_path()
+    elif os.name == 'nt':
+        return _get_win_appconfig_path()
+    else:
+        raise NotImplementedError('unknown system')
+
+
+def _get_posix_appconfig_path() -> str:
+    xdg_config_home = os.getenv('XDG_CONFIG_HOME')
+    if xdg_config_home:
+        config_dir = pathlib.Path(xdg_config_home) / _appname
+    else:
+        config_dir = pathlib.Path.home() / '.config' / _appname
+    config_dir.mkdir(parents=True, exist_ok=True)
+    return str(config_dir)
+
+
+def _get_win_appconfig_path() -> str:
+    program_data = os.getenv('PROGRAMDATA')
+    if program_data:
+        data_dir = pathlib.Path(program_data) / _appname
     else:
         data_dir = pathlib.Path.home() / 'AppData' / 'Local' / _appname
     data_dir.mkdir(parents=True, exist_ok=True)

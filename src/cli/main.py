@@ -1,12 +1,71 @@
 import sys
 import json
+import pathlib
 from requests_oauthlib import OAuth2Session
 import cli.userdata
 import easy.email
 import easy.features
+import click
 
 class OauthProviderConf(easy.email.OAuthConf, easy.email.ImapConf):
     pass
+
+
+class ProviderConf(OauthProviderConf):
+    domains: list[str]
+
+
+def load_provider_confs() -> list[ProviderConf]:
+    provider_confs = []
+    conf_dir = pathlib.Path(cli.userdata.get_system_appconfig_path())
+    if not conf_dir.exists():
+        return provider_confs 
+    for conf_file in conf_dir.glob('*.json'):
+        try:
+            with open(conf_file, 'r') as f:
+                data = json.loads(f.read())
+
+            if (isinstance(data, dict) and 
+                'auth_uri' in data and 
+                'token_uri' in data and 
+                'client_id' in data and 
+                'scopes' in data and 
+                'domains' in data and
+                'imap_server' in data and
+                'imap_port' in data):
+
+                provider_conf: ProviderConf = {
+                    # OAuth fields
+                    'auth_uri': data['auth_uri'],
+                    'token_uri': data['token_uri'],
+                    'refresh_uri': data.get('refresh_uri'),  # Optional field
+                    'client_id': data['client_id'],
+                    'scopes': data['scopes'],
+                    'client_secret': data.get('client_secret'),  # Optional field
+                    'redirect_uri': data['redirect_uri'],
+                    # IMAP fields
+                    'imap_server': data['imap_server'],
+                    'imap_port': data['imap_port'],
+                    # Other fields
+                    'domains': data['domains']
+                }
+                
+                provider_confs.append(provider_conf)
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            #print(f"Error parsing {conf_file}: {e}")
+            continue
+    
+    return provider_confs
+
+
+def map_provider_conf_by_domain() -> dict[str, ProviderConf]:
+    provider_confs = load_provider_confs()
+    mapping = {}
+    for provider_conf in provider_confs:
+        for domain in provider_conf['domains']:
+            mapping[domain] = provider_conf
+    return mapping
+
 
 def load_conf_from_file(filename) -> OauthProviderConf:
     try:
@@ -37,10 +96,44 @@ class OAuth2TokenStore(easy.email.OAuth2):
         if not data:
             self._store.delete(user)
         self._store.store(user, json.dumps(data).encode())
+
+
+@click.group()
+@click.pass_context
+def _cli(ctx):
+    pass
+
+
+@_cli.command()
+@click.argument('user', type=str)
+def download(user: str):
+    domain = user.split('@')[1]
+    conf = map_provider_conf_by_domain()[domain]
+    main_deprecated(user, conf)
+
+
+@_cli.command()
+@click.option('--local', 'is_local_input', flag_value=True, default=False, help='take local path as input')
+#@click.option('--no-headers', 'is_local_input', flag_value=True, default=False, help='avoid inserting headers in the first line (csv)')
+@click.option('--json', 'output', flag_value='JSON', default='CSV', help="output JSON")
+def mkfeatures(is_local_input, output):
+    pass
+
+
+# Current task
+# implement download command
+#   It should output mbox messages, see how it goes.
+#   Remember: the purpose is just obtaining a local database of email
+#   Nice: pipelining       
+
     
 # TODO
 # interface
-#   `easycli <source> --user= <command>` 
+#   easycli login
+#       store token for subsequent commands
+#   easycli download [user]
+#       output all messages to stdout,
+#   easycli mkfeatures --csv --no-headers
 # sources:
 #   - provider matching conf.json
 #   - mbox
@@ -49,24 +142,16 @@ class OAuth2TokenStore(easy.email.OAuth2):
 #   - `mkdata --mbox | --features | --label | --visual <output>`
 #   - `train <output>`
 #   - `predict --weights=`
-#
-# `easycli local . predict`
-# `easycli `
-import pprint
-def main():
+import mailbox
+def main_deprecated(user, provider_conf: OauthProviderConf):
     # TODO proper options
-    provider_conf_path = sys.argv[1]
-    email = sys.argv[2]
-    provider_conf = load_conf_from_file(provider_conf_path)
     auth = OAuth2TokenStore.client(provider_conf)
     inbox = easy.email.ImapInbox(provider_conf)
-    inbox.authenticate(email, auth)
+    inbox.authenticate(user, auth)
     for msg_batch in inbox.fetch():
         for msg in msg_batch:
-            f = easy.features.evaluate(msg)
-            # TODO prediction
-            pprint.pp(f)
-
-
-if __name__ == "__main__":
-    main()
+            msg = mailbox.mboxMessage(msg)
+            sys.stdout.write(str(msg) + '\n')
+            #f = easy.features.evaluate(msg)
+            # TODO prediction            
+            # pprint.pp(f)

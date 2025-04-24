@@ -178,14 +178,14 @@ class ImapInbox():
         # TODO handle exceptions
         status, data = self._imap.select('INBOX', readonly='True')
         if status != 'OK':
-            print('imap select error')
+            #print('imap select error')
             return
         status, data = self._imap.search(None, 'ALL')
         if status != 'OK':
-            print('imap search error')
+            #print('imap search error')
             return
         ids = data[0].split()
-        print(f"\nFetching {len(ids)} emails...\n")
+        #print(f"\nFetching {len(ids)} emails...\n")
         for i in range(0, len(ids), batch_size):
             batch_ids = b','.join(ids[i:i+batch_size]).decode('UTF-8')
             typ, data = self._imap.fetch(batch_ids, '(RFC822)')
