@@ -1,7 +1,16 @@
+build==1.2.2.post1
 certifi==2025.1.31
+cffi==1.17.1
 charset-normalizer==3.4.1
+click==8.1.8
+cryptography==44.0.2
+-e git+ssh://git@github.com/dabg3/EASY.git@ed6249a4c5d503722d96cd00e314948ab05340d8#egg=easy
 idna==3.10
 oauthlib==3.2.2
+packaging==24.2
+pycparser==2.22
+PyJWT==2.10.1
+pyproject_hooks==1.2.0
 requests==2.32.3
 requests-oauthlib==2.0.0
 urllib3==2.3.0

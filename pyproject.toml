@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-easycli = "cli.main:main"
+easycli = "cli.main:_cli"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

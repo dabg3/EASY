@@ -11,6 +11,7 @@ Then some kind of analysis is required to filter services emails further.
 
 If you like the project and you would like to contribute somehow (thought about another use cases? great), contact me, I appreciate :) 
 
+
 ## Development 
 
 Install venv `python -m venv venv` and activate `source venv/bin/activate`
@@ -37,8 +38,12 @@ python -m build .
 
 ## Configuration
 
-A provider must be configured to authenticate properly. 
 Note: only authentication via oauth is supported right now, basic auth will be added in future.
+
+A provider must be configured to authenticate. 
+Configuration directory is:
+* Linux: value of `XDG_CONFIG_HOME` env var if set, default to `~/.config/easy`
+* Windows: value of `PROGRAMDATA` env var if set, default TODO
 
 `gmail-conf.json`: client is confidential and requires a secret 
 ```json
@@ -52,7 +57,8 @@ Note: only authentication via oauth is supported right now, basic auth will be a
     ],
     "client_secret": "<secret>",
     "imap_server": "imap.gmail.com",
-    "imap_port": 993
+    "imap_port": 993,
+    "domains": ["gmail.com"]
 }
 ```
 
@@ -69,31 +75,40 @@ Note: only authentication via oauth is supported right now, basic auth will be a
             "offline_access"
     ],
     "imap_server": "outlook.office365.com",
-    "imap_port": 993
+    "imap_port": 993,
+    "domains": ["outlook.com", "hotmail.com"]
 }
 ```
+
+`domains` field is used to match an email to its provider configuration
 
 
 ## Run
 
-Right now `easycli` is very bare-bones, it's relevant for testing instead of real usage. 
-There's no input arguments parsing yet, arguments follow a certain order.
-
-It's been tested on gmail and outlook, other imap providers supporting 
+`easycli` has been tested on gmail and outlook, other imap providers supporting 
 `SASL XOAUTH2` mechanism may work.
 
 Application must be registered on whatever identity platform you're using e.g. Entra ID to access outlook.
 See Register Application for references.
 
-```plain
-easycli <path to provider-conf.json> <email>
-```
-
-Example: fetching emails from gmail via IMAP.
+User must authenticate before executing commands
 
 ```sh
-easycli gmail-conf.json myemail@gmail.com
+easycli login myemail@gmail.com
 ```
+
+Example: fetching emails from gmail via IMAP (writes to STDOUT).
+
+```sh
+easycli download myemail@gmail.com
+```
+
+Example: store all emails in a mbox file
+
+```sh
+easycli download --mbox=myemail.mbox myemail@gmail.com
+```
+
 
 ### Known Issues
 
@@ -106,8 +121,9 @@ Fix it by just setting `OAUTHLIB_RELAX_TOKEN_SCOPE` env var
 
 Example: avoid mismatching scopes error
 ```sh
-OAUTHLIB_RELAX_TOKEN_SCOPE=1 easycli outlook-conf.json myemail@hotmail.com
+OAUTHLIB_RELAX_TOKEN_SCOPE=1 easycli download myemail@hotmail.com
 ```
+
 
 ### Register Application
 
