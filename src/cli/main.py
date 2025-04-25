@@ -7,8 +7,10 @@ import cli.auth
 import easy.email
 import easy.features
 import click
+import mailbox
 
-class OauthProviderConf(easy.email.OAuthConf, easy.email.ImapConf):
+
+class OauthProviderConf(cli.auth.OAuthConf, easy.email.ImapConf):
     pass
 
 
@@ -59,28 +61,6 @@ def map_provider_conf_by_domain() -> dict[str, ProviderConf]:
     return mapping
 
 
-# poc
-class OAuth2TokenStore(easy.email.OAuth2):
-
-    def __init__(
-        self,
-        conf: easy.email.OAuthConf, 
-        user_prompt,
-    ):
-        super().__init__(conf, user_prompt)
-        self._store = cli.userdata.UnsafeFileStore()
-
-    def _load_auth_res(self, user: str) -> dict:
-        json_res = self._store.get(user)
-        return json.loads(json_res.decode()) if json_res else None
-
-    def _store_auth_res(self, user: str, data: dict | None):
-        # temporary delete 
-        if not data:
-            self._store.delete(user)
-        self._store.store(user, json.dumps(data).encode())
-
-
 def prompt_auth_url_cli(auth_url: str) -> str:
     print(f'To authorize access go to \n\n{auth_url}\n')
     auth_res = input('Enter the full callback URL\n')
@@ -108,19 +88,39 @@ def login(ctx, user: str):
     # this method authenticates users and stores credentials (tokens or password for basic auth)
     # to be used for subsequent commands
     authenticator = cli.auth.OauthInteractiveAuthenticator(conf, prompt_auth_url_cli)
-    auth_res: dict = authenticator.authenticate(user)
-    datastore.store_json(user, auth_res)
+    credentials: dict = authenticator.authenticate(user)
+    datastore.store_json(user, credentials)
 
 
 @_cli.command()
 @click.pass_context
+@click.option('--mbox', type=click.Path(dir_okay=False))
 @click.argument('user', type=str)
-def download(ctx, user: str):
+def download(ctx, mbox, user: str):
     domain = user.split('@')[1]
     conf = ctx.obj['providerconfigs'][domain]
     datastore = ctx.obj['userdatastore']
-    # TODO fetch emails, credentials are stored
-    # main_deprecated(user, conf)
+    credentials = datastore.get_json(user)
+    if not credentials:
+        return
+    inbox = easy.email.Inbox(credentials, conf)
+    if mbox:
+        write_mbox(inbox, mbox)
+    else:
+        write_stdout(inbox)
+   
+
+def write_mbox(inbox: easy.email.Inbox, path):
+    mbox = mailbox.mbox(path)
+    for msg in inbox.fetch():
+        mbox.add(msg)
+    mbox.flush()
+    mbox.unlock()
+
+
+def write_stdout(inbox: easy.email.Inbox):
+    for msg in inbox.fetch():
+        sys.stdout.write(str(msg) + '\n')
 
 
 @_cli.command()
@@ -138,31 +138,5 @@ def mkfeatures(is_local_input, output):
 #   Nice: pipelining       
 
     
-# TODO
-# interface
-#   easycli login
-#       store token for subsequent commands
-#   easycli download [user]
-#       output all messages to stdout,
-#   easycli mkfeatures --csv --no-headers
-# sources:
-#   - provider matching conf.json
-#   - mbox
-#   - files for train/predict
-# easycli commands:
-#   - `mkdata --mbox | --features | --label | --visual <output>`
-#   - `train <output>`
-#   - `predict --weights=`
-import mailbox
-def main_deprecated(user, provider_conf: OauthProviderConf):
-    # TODO proper options
-    auth = OAuth2TokenStore.client(provider_conf)
-    inbox = easy.email.ImapInbox(provider_conf)
-    inbox.authenticate(user, auth)
-    for msg_batch in inbox.fetch():
-        for msg in msg_batch:
-            msg = mailbox.mboxMessage(msg)
-            sys.stdout.write(str(msg) + '\n')
-            #f = easy.features.evaluate(msg)
-            # TODO prediction            
-            # pprint.pp(f)
+if __name__ == '__main__':
+    _cli()

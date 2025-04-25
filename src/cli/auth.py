@@ -28,9 +28,10 @@ class OauthInteractiveAuthenticator:
         )
 
     def authenticate(self, user: str) -> dict:
-        print(self._conf)
         auth_res = self._askUserAuthorization()
-        return self._fetchTokens(auth_res)
+        token_res = self._fetchTokens(auth_res)
+        credentials = {'user': user} | token_res
+        return credentials
 
     def _askUserAuthorization(self) -> str:
         auth_url, state = self._oauth.authorization_url(
