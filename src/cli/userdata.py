@@ -3,6 +3,7 @@ import pathlib
 import base64
 import collections.abc
 import hashlib
+import json
 
 class UnsafeFileStore:
 
@@ -23,6 +24,10 @@ class UnsafeFileStore:
         filepath = self._datapath / filename
         v = base64.b64encode(data).decode()
         self._secure_write(filepath, v)
+
+    def store_json(self, addr: str, data: dict):
+        data_bytes = json.dumps(data).encode()
+        self.store(addr, data_bytes)
         
     @staticmethod
     def _secure_write(path: pathlib.Path, data: bytes):
@@ -42,6 +47,10 @@ class UnsafeFileStore:
         with open(filepath, 'r') as f:
             data = f.read()
         return base64.b64decode(data.encode())
+
+    def get_json(self, addr) -> dict | None:
+        json_res = self.get(addr)
+        return json.loads(json_res.decode()) if json_res else None
 
     def delete(self, addr: str):
         filename = hashlib.sha256(addr.encode()).hexdigest()

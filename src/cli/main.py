@@ -3,6 +3,7 @@ import json
 import pathlib
 from requests_oauthlib import OAuth2Session
 import cli.userdata
+import cli.auth
 import easy.email
 import easy.features
 import click
@@ -80,30 +81,46 @@ class OAuth2TokenStore(easy.email.OAuth2):
         self._store.store(user, json.dumps(data).encode())
 
 
+def prompt_auth_url_cli(auth_url: str) -> str:
+    print(f'To authorize access go to \n\n{auth_url}\n')
+    auth_res = input('Enter the full callback URL\n')
+    return auth_res
+
+
 @click.group()
 @click.pass_context
 def _cli(ctx):
-    pass
+    ctx.ensure_object(dict)
+    ctx.obj['userdatastore'] = cli.userdata.UnsafeFileStore()
+    ctx.obj['providerconfigs'] = map_provider_conf_by_domain()
 
 
 @_cli.command()
+@click.pass_context
 @click.argument('user', type=str)
-def login(user: str):
+def login(ctx, user: str):
     # if user is email use domain to retrieve conf.
     # if user is username a parameter to specify provider is required.
     # For now only oauth works so user is always an email
     domain = user.split('@')[1]
-    conf = map_provider_conf_by_domain()[domain]
+    conf = ctx.obj['providerconfigs'][domain]
+    datastore = ctx.obj['userdatastore']
     # this method authenticates users and stores credentials (tokens or password for basic auth)
-    # to be used from the other commands
+    # to be used for subsequent commands
+    authenticator = cli.auth.OauthInteractiveAuthenticator(conf, prompt_auth_url_cli)
+    auth_res: dict = authenticator.authenticate(user)
+    datastore.store_json(user, auth_res)
 
 
 @_cli.command()
+@click.pass_context
 @click.argument('user', type=str)
-def download(user: str):
+def download(ctx, user: str):
     domain = user.split('@')[1]
-    conf = map_provider_conf_by_domain()[domain]
-    main_deprecated(user, conf)
+    conf = ctx.obj['providerconfigs'][domain]
+    datastore = ctx.obj['userdatastore']
+    # TODO fetch emails, credentials are stored
+    # main_deprecated(user, conf)
 
 
 @_cli.command()
