@@ -3,14 +3,14 @@ import json
 import pathlib
 from requests_oauthlib import OAuth2Session
 import cli.userdata
-import cli.auth
+import easy.auth
 import easy.email
 import easy.features
 import click
 import mailbox
 
 
-class OauthProviderConf(cli.auth.OAuthConf, easy.email.ImapConf):
+class OauthProviderConf(easy.auth.OAuthConf, easy.email.ImapConf):
     pass
 
 
@@ -87,7 +87,7 @@ def login(ctx, user: str):
     datastore = ctx.obj['userdatastore']
     # this method authenticates users and stores credentials (tokens or password for basic auth)
     # to be used for subsequent commands
-    authenticator = cli.auth.OauthInteractiveAuthenticator(conf, prompt_auth_url_cli)
+    authenticator = easy.auth.OauthInteractiveAuthenticator(conf, prompt_auth_url_cli)
     credentials: dict = authenticator.authenticate(user)
     datastore.store_json(user, credentials)
 

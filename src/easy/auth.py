@@ -28,6 +28,9 @@ class OauthInteractiveAuthenticator:
         )
 
     def authenticate(self, user: str) -> dict:
+        """
+        returns everything needed to make authorized operations
+        """
         auth_res = self._askUserAuthorization()
         token_res = self._fetchTokens(auth_res)
         credentials = {'user': user} | token_res
