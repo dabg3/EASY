@@ -129,6 +129,6 @@ def _get_win_appconfig_path() -> pathlib.Path:
     if program_data:
         data_dir = pathlib.Path(program_data) / _appname
     else:
-        data_dir = pathlib.Path.home() / 'AppData' / 'Local' / _appname
+        data_dir = None # TODO
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir
