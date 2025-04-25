@@ -15,46 +15,37 @@ class ProviderConf(OauthProviderConf):
     domains: list[str]
 
 
+def load_json_from_file(filename) -> any:
+    try:
+        with open(filename, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        # TODO exception
+        return None
+
+
 def load_provider_confs() -> list[ProviderConf]:
     provider_confs = []
-    conf_dir = pathlib.Path(cli.userdata.get_system_appconfig_path())
-    if not conf_dir.exists():
-        return provider_confs 
+    conf_dir = cli.userdata.get_system_appconfig_path()
     for conf_file in conf_dir.glob('*.json'):
-        try:
-            with open(conf_file, 'r') as f:
-                data = json.loads(f.read())
-
-            if (isinstance(data, dict) and 
-                'auth_uri' in data and 
-                'token_uri' in data and 
-                'client_id' in data and 
-                'scopes' in data and 
-                'domains' in data and
-                'imap_server' in data and
-                'imap_port' in data):
-
-                provider_conf: ProviderConf = {
-                    # OAuth fields
-                    'auth_uri': data['auth_uri'],
-                    'token_uri': data['token_uri'],
-                    'refresh_uri': data.get('refresh_uri'),  # Optional field
-                    'client_id': data['client_id'],
-                    'scopes': data['scopes'],
-                    'client_secret': data.get('client_secret'),  # Optional field
-                    'redirect_uri': data['redirect_uri'],
-                    # IMAP fields
-                    'imap_server': data['imap_server'],
-                    'imap_port': data['imap_port'],
-                    # Other fields
-                    'domains': data['domains']
-                }
-                
-                provider_confs.append(provider_conf)
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
-            #print(f"Error parsing {conf_file}: {e}")
-            continue
-    
+            conf: ProviderConf = load_json_from_file(conf_file)
+            # validation ?
+            #provider_conf: ProviderConf = {
+            #    # OAuth fields
+            #    'auth_uri': conf['auth_uri'],
+            #    'token_uri': conf['token_uri'],
+            #    'refresh_uri': conf.get('refresh_uri'),  # Optional field
+            #    'client_id': conf['client_id'],
+            #    'scopes': conf['scopes'],
+            #    'client_secret': conf.get('client_secret'),  # Optional field
+            #    'redirect_uri': conf['redirect_uri'],
+            #    # IMAP fields
+            #    'imap_server': conf['imap_server'],
+            #    'imap_port': conf['imap_port'],
+            #    # Other fields
+            #    'domains': conf['domains']
+            #}
+            provider_confs.append(conf)
     return provider_confs
 
 
@@ -65,15 +56,6 @@ def map_provider_conf_by_domain() -> dict[str, ProviderConf]:
         for domain in provider_conf['domains']:
             mapping[domain] = provider_conf
     return mapping
-
-
-def load_conf_from_file(filename) -> OauthProviderConf:
-    try:
-        with open(filename, 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        # TODO exception
-        return None
 
 
 # poc
@@ -102,6 +84,18 @@ class OAuth2TokenStore(easy.email.OAuth2):
 @click.pass_context
 def _cli(ctx):
     pass
+
+
+@_cli.command()
+@click.argument('user', type=str)
+def login(user: str):
+    # if user is email use domain to retrieve conf.
+    # if user is username a parameter to specify provider is required.
+    # For now only oauth works so user is always an email
+    domain = user.split('@')[1]
+    conf = map_provider_conf_by_domain()[domain]
+    # this method authenticates users and stores credentials (tokens or password for basic auth)
+    # to be used from the other commands
 
 
 @_cli.command()
