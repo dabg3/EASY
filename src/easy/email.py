@@ -4,18 +4,29 @@ import imaplib
 import email.message
 import email.policy
 import base64
+import abc
 from requests_oauthlib import OAuth2Session
+import mailbox
+import inspect
+
+
+class Inbox(abc.ABC):
+
+    @abc.abstractmethod
+    def fetch(self, *, batch_size=100):
+        pass
 
 
 class ImapConf(typing.TypedDict):
     imap_server: str
     imap_port: int
     # ssl: bool
+    
+_imap_annotations = inspect.get_annotations(ImapConf)
 
+class ImapInbox(Inbox):
 
-class Inbox():
-
-    def __init__(self, credentials: dict, conf: ImapConf):
+    def __init__(self, conf: ImapConf, credentials: dict):
         self._client = imaplib.IMAP4_SSL(conf['imap_server'], conf['imap_port'])
         login_fn = _login_imap(credentials)
         login_fn(self._client)
@@ -61,3 +72,34 @@ def _login_imap(credentials: dict) -> collections.abc.Callable[[imaplib.IMAP4], 
         return _login_oauth
     # fallback
     return _login_basic
+
+
+class MboxConf(typing.TypedDict):
+    path: str
+
+_mbox_annotations = inspect.get_annotations(MboxConf)
+
+
+class LocalMbox(Inbox):
+
+    def __init__(self, conf: MboxConf):
+        self._mailbox = mailbox.mbox(conf['path'])
+
+    def fetch(
+        self, *, batch_size=1
+    ) -> typing.Generator[email.message.EmailMessage, None, None]:
+        for msg in self._mailbox.itervalues():
+            msgb = msg.as_bytes()
+            yield email.message_from_bytes(msgb, policy=email.policy.default)
+
+
+
+#def instance_inbox(conf: ImapConf | MboxConf, credentials: dict = None) -> Inbox:
+#    global _imap_annotations
+#    global _mbox_annotations
+#    if inspect.get_annotations(conf) is _imap_annotations:
+#        return ImapInbox(conf, credentials)
+#    if inspect.get_annotations(conf) is _mbox_annotations:
+#        return LocalMbox(conf)
+#    raise ValueError("invalid inbox configuration")
+

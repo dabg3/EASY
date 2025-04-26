@@ -66,6 +66,18 @@ def prompt_auth_url_cli(auth_url: str) -> str:
     auth_res = input('Enter the full callback URL\n')
     return auth_res
 
+           
+def configure_inbox(ctx, *, user=None, path=None):
+    if user:
+        domain = user.split('@')[1]
+        conf = ctx.obj['providerconfigs'][domain]
+        datastore = ctx.obj['userdatastore']
+        credentials = datastore.get_json(user)
+        return easy.email.ImapInbox(conf, credentials)
+    if path:
+        conf = easy.email.MboxConf(path=path)
+        return easy.email.LocalMbox(conf)
+
 
 @click.group()
 @click.pass_context
@@ -97,20 +109,14 @@ def login(ctx, user: str):
 @click.option('--mbox', type=click.Path(dir_okay=False))
 @click.argument('user', type=str)
 def download(ctx, mbox, user: str):
-    domain = user.split('@')[1]
-    conf = ctx.obj['providerconfigs'][domain]
-    datastore = ctx.obj['userdatastore']
-    credentials = datastore.get_json(user)
-    if not credentials:
-        return
-    inbox = easy.email.Inbox(credentials, conf)
+    inbox = configure_inbox(ctx, user=user)
     if mbox:
         write_mbox(inbox, mbox)
     else:
         write_stdout(inbox)
-   
 
-def write_mbox(inbox: easy.email.Inbox, path):
+
+def write_mbox(inbox: easy.email.ImapInbox, path):
     mbox = mailbox.mbox(path)
     for msg in inbox.fetch():
         mbox.add(msg)
@@ -118,25 +124,59 @@ def write_mbox(inbox: easy.email.Inbox, path):
     mbox.unlock()
 
 
-def write_stdout(inbox: easy.email.Inbox):
+def write_stdout(inbox: easy.email.ImapInbox):
+    # experimental, how to separate messages ?
     for msg in inbox.fetch():
         sys.stdout.write(str(msg) + '\n')
 
 
 @_cli.command()
-@click.option('--local', 'is_local_input', flag_value=True, default=False, help='take local path as input')
+@click.pass_context
+@click.option('--mbox', type=click.Path(dir_okay=False))
 #@click.option('--no-headers', 'is_local_input', flag_value=True, default=False, help='avoid inserting headers in the first line (csv)')
 @click.option('--json', 'output', flag_value='JSON', default='CSV', help="output JSON")
-def mkfeatures(is_local_input, output):
+@click.argument('user', required=False, type=str)
+def mkfeatures(ctx, mbox, output, user):
+    inbox = configure_inbox(ctx, user=user, path=mbox)
+    features = list(filter(lambda f: f is not None, map(easy.features.evaluate, inbox.fetch())))
+    keys = features[0].keys()
+    # --no-headers
+    #sys.stdout.write(keys)
+    for f in features:
+        # csv
+        row = [f[key] for key in keys]
+        out = ','.join(map(str, row))
+        sys.stdout.write(out + '\n')
+
+
+@_cli.command()
+@click.pass_context
+@click.option('--mbox', type=click.Path(dir_okay=False))
+@click.option('--features', type=click.Path(dir_okay=False))
+#@click.option('--no-headers', 'is_local_input', flag_value=True, default=False, help='avoid inserting headers in the first line (csv)')
+@click.option('--json', 'output', flag_value='JSON', default='CSV', help="output JSON")
+@click.argument('user', required=False, type=str)
+def label(ctx, mbox, features, output, user):
     pass
 
 
-# Current task
-# implement download command
-#   It should output mbox messages, see how it goes.
-#   Remember: the purpose is just obtaining a local database of email
-#   Nice: pipelining       
+@_cli.command()
+@click.pass_context
+@click.option('--model', default=None, type=str)
+@click.option('--features', type=click.Path(dir_okay=False))
+#@click.option('--no-headers', 'is_local_input', flag_value=True, default=False, help='avoid inserting headers in the first line (csv)')
+#@click.option('--json', 'output', flag_value='JSON', default='CSV', help="output JSON")
+@click.argument('labels', type=click.Path(dir_okay=False))
+def train(ctx, model, labels):
+    pass
 
     
 if __name__ == '__main__':
     _cli()
+
+# api
+# input: provider_conf -> list[EmailMessage]
+# mkfeature: EmailMessage -> dict
+# label: dict -> dict
+# train: list[dict] -> weights
+# analyze: (model, weights) -> dict
