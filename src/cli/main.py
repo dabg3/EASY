@@ -5,6 +5,7 @@ from requests_oauthlib import OAuth2Session
 import cli.userdata
 import easy.auth
 import easy.email
+import email.message
 import easy.features
 import click
 import mailbox
@@ -67,16 +68,17 @@ def prompt_auth_url_cli(auth_url: str) -> str:
     return auth_res
 
            
-def configure_inbox(ctx, *, user=None, path=None):
-    if user:
-        domain = user.split('@')[1]
-        conf = ctx.obj['providerconfigs'][domain]
-        datastore = ctx.obj['userdatastore']
-        credentials = datastore.get_json(user)
-        return easy.email.ImapInbox(conf, credentials)
+def configure_inbox(ctx, *, provider=None, user=None, path=None):
     if path:
         conf = easy.email.MboxConf(path=path)
         return easy.email.LocalMbox(conf)
+    if user:
+        domain = user.split('@')[1]
+        conf = ctx.obj['providerconfigs'][domain] if not provider \
+                                                  else ctx.obj['providerconfigs'][provider]
+        datastore = ctx.obj['userdatastore']
+        credentials = datastore.get_json(user)
+        return easy.email.ImapInbox(conf, credentials)
 
 
 @click.group()
@@ -89,13 +91,15 @@ def _cli(ctx):
 
 @_cli.command()
 @click.pass_context
+@click.option('--provider', type=str)
 @click.argument('user', type=str)
-def login(ctx, user: str):
-    # if user is email use domain to retrieve conf.
-    # if user is username a parameter to specify provider is required.
+def login(ctx, provider: str, user: str):
+    # if user is email, use domain to retrieve conf.
+    # if user is username, a parameter to specify provider is required.
     # For now only oauth works so user is always an email
     domain = user.split('@')[1]
-    conf = ctx.obj['providerconfigs'][domain]
+    conf = ctx.obj['providerconfigs'][domain] if not provider \
+                                              else ctx.obj['providerconfigs'][provider]
     datastore = ctx.obj['userdatastore']
     # this method authenticates users and stores credentials (tokens or password for basic auth)
     # to be used for subsequent commands
@@ -107,9 +111,10 @@ def login(ctx, user: str):
 @_cli.command()
 @click.pass_context
 @click.option('--mbox', type=click.Path(dir_okay=False))
+@click.option('--provider', type=str)
 @click.argument('user', type=str)
-def download(ctx, mbox, user: str):
-    inbox = configure_inbox(ctx, user=user)
+def download(ctx, mbox, provider, user: str):
+    inbox = configure_inbox(ctx, user=user, provider=provider)
     if mbox:
         write_mbox(inbox, mbox)
     else:
@@ -132,18 +137,48 @@ def write_stdout(inbox: easy.email.ImapInbox):
 
 @_cli.command()
 @click.pass_context
-@click.option('--mbox', type=click.Path(dir_okay=False))
-#@click.option('--no-headers', 'is_local_input', flag_value=True, default=False, help='avoid inserting headers in the first line (csv)')
-@click.option('--json', 'output', flag_value='JSON', default='CSV', help="output JSON")
+@click.option('--mbox', type=click.Path(exists=True, dir_okay=False))
+@click.option('--csv', 'output', flag_value='CSV', default=True)
+@click.option('--json', 'output', flag_value='JSON')
+@click.option('--no-headers', 'output_headers', flag_value=False, default=True, help='avoid inserting headers in the first line (csv)')
+@click.option('--msgid', 'output_msgid', flag_value=True, default=False, help='avoid inserting headers in the first line (csv)')
 @click.argument('user', required=False, type=str)
-def mkfeatures(ctx, mbox, output, user):
+def mkfeatures(ctx, mbox, output, output_headers, output_msgid, user):
     inbox = configure_inbox(ctx, user=user, path=mbox)
-    features = list(filter(lambda f: f is not None, map(easy.features.evaluate, inbox.fetch())))
-    keys = features[0].keys()
-    # --no-headers
-    #sys.stdout.write(keys)
+    features = \
+        filter(
+            lambda f: f is not None, 
+            map(
+                lambda m: mkfeature(m, msgid=output_msgid), 
+                inbox.fetch()
+            )
+        )
+    # csv
+    match output:
+        case 'JSON':
+            write_json(features) 
+        case 'CSV':
+            write_csv(features, write_headers=output_headers) 
+
+
+def mkfeature(m: email.message.EmailMessage, msgid: bool = False):
+    f = easy.features.evaluate(m)
+    if f is not None and msgid:
+        f['msgid'] = m['message-id']
+    return f
+
+
+def write_json(features):
     for f in features:
-        # csv
+        sys.stdout.write(json.dumps(f) + '\n')
+
+
+def write_csv(features, *, write_headers: bool = True):
+    for i, f in enumerate(features):
+        keys = f.keys()
+        if i == 0 and write_headers:
+            headers = ",".join(keys)
+            sys.stdout.write(headers + '\n')
         row = [f[key] for key in keys]
         out = ','.join(map(str, row))
         sys.stdout.write(out + '\n')
@@ -151,21 +186,28 @@ def mkfeatures(ctx, mbox, output, user):
 
 @_cli.command()
 @click.pass_context
-@click.option('--mbox', type=click.Path(dir_okay=False))
-@click.option('--features', type=click.Path(dir_okay=False))
-#@click.option('--no-headers', 'is_local_input', flag_value=True, default=False, help='avoid inserting headers in the first line (csv)')
-@click.option('--json', 'output', flag_value='JSON', default='CSV', help="output JSON")
+@click.option('--mbox', type=click.Path(exists=True, dir_okay=False))
+@click.option('--csv', 'output', flag_value='CSV', default=True)
+@click.option('--json', 'output', flag_value='JSON')
+@click.option('--no-headers', 'headers', flag_value=False, default=True, help='avoid inserting headers in the first line (csv)')
 @click.argument('user', required=False, type=str)
-def label(ctx, mbox, features, output, user):
+def label(ctx, mbox, output, user):
+    inbox = configure_inbox(ctx, user=user, path=mbox)
+    for msg in inbox.fetch():
+        label = label_msg(msg)
+
+
+def label_msg(msg: email.message.EmailMessage) -> int:
+    pass
+
+
+def render_msg(msg: email.message.EmailMessage) -> int:
     pass
 
 
 @_cli.command()
 @click.pass_context
 @click.option('--model', default=None, type=str)
-@click.option('--features', type=click.Path(dir_okay=False))
-#@click.option('--no-headers', 'is_local_input', flag_value=True, default=False, help='avoid inserting headers in the first line (csv)')
-#@click.option('--json', 'output', flag_value='JSON', default='CSV', help="output JSON")
 @click.argument('labels', type=click.Path(dir_okay=False))
 def train(ctx, model, labels):
     pass
